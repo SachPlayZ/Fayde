@@ -53,14 +53,35 @@ function formatDate(dateStr: string | null) {
   });
 }
 
+function Highlight({ text, query }: { text: string; query: string }) {
+  if (!query.trim()) return <>{text}</>;
+  const lower = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let idx = lower.indexOf(lowerQuery);
+  while (idx !== -1) {
+    if (idx > last) parts.push(text.slice(last, idx));
+    parts.push(
+      <mark key={idx} className="bg-yellow-200 dark:bg-yellow-800/60 rounded-sm px-0.5 not-italic">
+        {text.slice(idx, idx + query.length)}
+      </mark>
+    );
+    last = idx + query.length;
+    idx = lower.indexOf(lowerQuery, last);
+  }
+  if (last < text.length) parts.push(text.slice(last));
+  return <>{parts}</>;
+}
+
 function isOverdue(dateStr: string | null) {
   if (!dateStr) return false;
   return new Date(dateStr) < new Date();
 }
 
-type TaskRowProps = { task: Task; index?: number };
+type TaskRowProps = { task: Task; index?: number; search?: string };
 
-export function TaskRow({ task, index = 0 }: TaskRowProps) {
+export function TaskRow({ task, index = 0, search = "" }: TaskRowProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const updateTask = useUpdateTask();
@@ -114,11 +135,11 @@ export function TaskRow({ task, index = 0 }: TaskRowProps) {
               isDone && "line-through text-muted-foreground"
             )}
           >
-            {task.title}
+            <Highlight text={task.title} query={search} />
           </span>
           {task.description && (
             <p className="text-xs text-muted-foreground truncate max-w-xs mt-0.5">
-              {task.description}
+              <Highlight text={task.description} query={search} />
             </p>
           )}
         </TableCell>
@@ -157,7 +178,7 @@ export function TaskRow({ task, index = 0 }: TaskRowProps) {
                   : "text-muted-foreground"
               )}
             >
-              {formatDate(task.due_date)}
+              <Highlight text={formatDate(task.due_date)!} query={search} />
               {overdue && !isDone && (
                 <span className="ml-1 opacity-70">· overdue</span>
               )}
@@ -229,11 +250,11 @@ export function TaskRow({ task, index = 0 }: TaskRowProps) {
                 isDone && "line-through text-muted-foreground"
               )}
             >
-              {task.title}
+              <Highlight text={task.title} query={search} />
             </p>
             {task.description && (
               <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                {task.description}
+                <Highlight text={task.description} query={search} />
               </p>
             )}
           </div>
@@ -285,7 +306,7 @@ export function TaskRow({ task, index = 0 }: TaskRowProps) {
                   : "text-muted-foreground"
               )}
             >
-              Due {formatDate(task.due_date)}
+              Due <Highlight text={formatDate(task.due_date)!} query={search} />
               {overdue && !isDone && " · overdue"}
             </span>
           )}

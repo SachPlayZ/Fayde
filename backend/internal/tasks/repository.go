@@ -83,7 +83,10 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 		idx++
 	}
 	if p.Search != "" {
-		conds = append(conds, fmt.Sprintf("title ILIKE $%d", idx))
+		conds = append(conds, fmt.Sprintf(
+			"(title ILIKE $%d OR description ILIKE $%d OR TO_CHAR(due_date, 'Mon DD, YYYY') ILIKE $%d OR TO_CHAR(due_date, 'YYYY-MM-DD') ILIKE $%d)",
+			idx, idx, idx, idx,
+		))
 		args = append(args, "%"+p.Search+"%")
 		idx++
 	}

@@ -4,8 +4,9 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/app/(app)/_components/ThemeToggle";
 import { ActivitySidebar } from "@/app/(app)/_components/ActivitySidebar";
-import { LogOut, Activity } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { LogOut, Activity, ShieldCheck } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, loading } = useAuth();
@@ -44,6 +45,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center justify-center w-7 h-7 rounded-full bg-secondary text-secondary-foreground text-xs font-semibold select-none">
               {initials}
             </div>
+            {user.role === "admin" && (
+              <Link
+                href="/admin"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Admin
+              </Link>
+            )}
             <ThemeToggle />
             <Button
               variant="ghost"

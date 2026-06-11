@@ -216,7 +216,7 @@ export function TasksPageClient() {
               </TableHeader>
               <TableBody>
                 {tasks.map((task, i) => (
-                  <TaskRow key={task.id} task={task} index={i} />
+                  <TaskRow key={task.id} task={task} index={i} search={search} />
                 ))}
               </TableBody>
             </Table>
@@ -225,7 +225,7 @@ export function TasksPageClient() {
           {/* Mobile cards */}
           <div className="md:hidden flex flex-col gap-2">
             {tasks.map((task, i) => (
-              <TaskRow key={task.id} task={task} index={i} />
+              <TaskRow key={task.id} task={task} index={i} search={search} />
             ))}
           </div>
         </div>

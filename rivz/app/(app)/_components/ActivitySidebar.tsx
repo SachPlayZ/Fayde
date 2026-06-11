@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { useGlobalActivity, type ActivityLogWithTask } from "@/lib/activity-hooks";
 import { Button } from "@/components/ui/button";
@@ -133,7 +133,7 @@ function ActivityEntry({ log, index }: { log: ActivityLogWithTask; index: number
 
   return (
     <div
-      className="group relative flex gap-3 rounded-xl p-3 hover:bg-muted/50 transition-colors duration-150 animate-in fade-in-0 slide-in-from-right-3 duration-300"
+      className="group relative flex gap-3 rounded-xl p-3 hover:bg-muted/50 transition-colors animate-in fade-in-0 slide-in-from-right-3 duration-300"
       style={{ animationDelay: `${Math.min(index * 35, 400)}ms` }}
     >
       <div className="flex flex-col items-center gap-1 pt-0.5">
@@ -188,6 +188,15 @@ type Props = {
 export function ActivitySidebar({ open, onClose }: Props) {
   const [filter, setFilter] = useState<FilterKey>("all");
   const { data: logs = [], isLoading } = useGlobalActivity(open);
+  const [entryKey, setEntryKey] = useState(0);
+  const wasOpen = useRef(false);
+
+  useEffect(() => {
+    if (open && !wasOpen.current) {
+      setEntryKey((k) => k + 1);
+    }
+    wasOpen.current = open;
+  }, [open]);
 
   const filtered = useMemo(
     () => logs.filter((l) => matchesFilter(l, filter)),
@@ -279,7 +288,7 @@ export function ActivitySidebar({ open, onClose }: Props) {
           ) : (
             <div className="flex flex-col">
               {filtered.map((log, i) => (
-                <ActivityEntry key={log.id} log={log} index={i} />
+                <ActivityEntry key={`${log.id}-${entryKey}`} log={log} index={i} />
               ))}
             </div>
           )}
