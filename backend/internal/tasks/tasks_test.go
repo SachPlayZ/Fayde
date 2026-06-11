@@ -20,29 +20,36 @@ var testPool *pgxpool.Pool
 func TestMain(m *testing.M) {
 	ctx := context.Background()
 
-	pgContainer, err := postgres.Run(ctx,
-		"postgres:16-alpine",
-		postgres.WithDatabase("testdb"),
-		postgres.WithUsername("testuser"),
-		postgres.WithPassword("testpass"),
-		postgres.BasicWaitStrategies(),
-	)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "start postgres container: %v\n", err)
-		os.Exit(1)
-	}
-	defer func() {
-		if err := pgContainer.Terminate(ctx); err != nil {
-			fmt.Fprintf(os.Stderr, "terminate container: %v\n", err)
+	var connStr string
+
+	if testURL := os.Getenv("TEST_DATABASE_URL"); testURL != "" {
+		connStr = testURL
+	} else {
+		pgContainer, err := postgres.Run(ctx,
+			"postgres:16-alpine",
+			postgres.WithDatabase("testdb"),
+			postgres.WithUsername("testuser"),
+			postgres.WithPassword("testpass"),
+			postgres.BasicWaitStrategies(),
+		)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "start postgres container: %v\n", err)
+			os.Exit(1)
 		}
-	}()
+		defer func() {
+			if err := pgContainer.Terminate(ctx); err != nil {
+				fmt.Fprintf(os.Stderr, "terminate container: %v\n", err)
+			}
+		}()
 
-	connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "get connection string: %v\n", err)
-		os.Exit(1)
+		connStr, err = pgContainer.ConnectionString(ctx, "sslmode=disable")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "get connection string: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
+	var err error
 	testPool, err = db.Connect(ctx, connStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "connect pool: %v\n", err)
@@ -51,7 +58,7 @@ func TestMain(m *testing.M) {
 	defer testPool.Close()
 
 	migrateURL := toPgx5URL(connStr)
-	if err := db.RunMigrations(migrateURL); err != nil {
+	if err := db.RunMigrations(migrateURL); err != nil && err.Error() != "no change" {
 		fmt.Fprintf(os.Stderr, "run migrations: %v\n", err)
 		os.Exit(1)
 	}

@@ -3,7 +3,11 @@ package tasks
 import (
 	"context"
 	"fmt"
+
+	"github.com/go-playground/validator/v10"
 )
+
+var validate = validator.New()
 
 // Service handles business logic for task operations.
 type Service struct {
@@ -17,6 +21,9 @@ func NewService(repo Repository) *Service {
 
 // CreateTask creates a new task for the given user.
 func (s *Service) CreateTask(ctx context.Context, userID string, req CreateRequest) (*Task, error) {
+	if err := validate.Struct(req); err != nil {
+		return nil, fmt.Errorf("service: validate: %w", err)
+	}
 	task, err := s.repo.CreateTask(ctx, userID, req)
 	if err != nil {
 		return nil, fmt.Errorf("service: create task: %w", err)

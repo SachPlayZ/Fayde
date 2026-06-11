@@ -12,7 +12,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!loading && !user) router.replace("/login");
   }, [user, loading, router]);
 
-  if (loading || !user) return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen flex flex-col">

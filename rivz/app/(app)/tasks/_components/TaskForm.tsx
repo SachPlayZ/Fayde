@@ -50,7 +50,7 @@ export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
       description: task?.description ?? "",
       status: task?.status ?? "todo",
       priority: task?.priority ?? "medium",
-      due_date: task?.due_date ?? null,
+      due_date: task?.due_date ? task.due_date.slice(0, 10) : null,
     },
   });
 
@@ -59,11 +59,15 @@ export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
 
   const onSubmit = async (data: TaskInput) => {
     try {
+      const payload = {
+        ...data,
+        due_date: data.due_date ? `${data.due_date}T00:00:00Z` : null,
+      };
       if (isEdit && task) {
-        await updateTask.mutateAsync({ id: task.id, ...data });
+        await updateTask.mutateAsync({ id: task.id, ...payload });
         toast.success("Task updated");
       } else {
-        await createTask.mutateAsync(data);
+        await createTask.mutateAsync(payload);
         toast.success("Task created");
       }
       reset();
