@@ -53,7 +53,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 
 	httputil.JSON(w, http.StatusCreated, authResponse{
 		Token: result.Token,
-		User:  PublicUser{ID: result.User.ID, Email: result.User.Email},
+		User:  PublicUser{ID: result.User.ID, Email: result.User.Email, Role: result.User.Role},
 	})
 }
 
@@ -83,7 +83,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	httputil.JSON(w, http.StatusOK, authResponse{
 		Token: result.Token,
-		User:  PublicUser{ID: result.User.ID, Email: result.User.Email},
+		User:  PublicUser{ID: result.User.ID, Email: result.User.Email, Role: result.User.Role},
 	})
 }
 
@@ -101,7 +101,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.JSON(w, http.StatusOK, PublicUser{ID: user.ID, Email: user.Email})
+	httputil.JSON(w, http.StatusOK, PublicUser{ID: user.ID, Email: user.Email, Role: user.Role})
 }
 
 // validationFields converts validator.ValidationErrors into a string map.

@@ -4,8 +4,11 @@ package server
 import (
 	"net/http"
 
+	"github.com/SachPlayZ/rivz-asn/backend/internal/admin"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/attachments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/httputil"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -17,6 +20,9 @@ func New(
 	cfg ServerConfig,
 	authHandler *auth.Handler,
 	tasksHandler *tasks.Handler,
+	adminHandler *admin.Handler,
+	sseHandler *sse.Handler,
+	attachmentsHandler *attachments.Handler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -30,8 +36,8 @@ func New(
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{cfg.CORSOrigin},
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		ExposedHeaders:   []string{"Link"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Cache-Control"},
+		ExposedHeaders:   []string{"Link", "Content-Type"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
@@ -46,6 +52,9 @@ func New(
 	r.Post("/auth/login", authHandler.Login)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Get("/auth/me", authHandler.Me)
 
+	// SSE endpoint — no auth middleware (handler validates token from query param).
+	r.Get("/events", sseHandler.ServeSSE)
+
 	// Task routes (all JWT-protected).
 	r.Group(func(r chi.Router) {
 		r.Use(auth.Authenticate(cfg.JWTSecret))
@@ -55,6 +64,21 @@ func New(
 		r.Get("/tasks/{id}", tasksHandler.Get)
 		r.Patch("/tasks/{id}", tasksHandler.Update)
 		r.Delete("/tasks/{id}", tasksHandler.Delete)
+		r.Get("/tasks/{id}/activity", tasksHandler.GetActivity)
+
+		// Attachment routes.
+		r.Post("/tasks/{id}/attachments", attachmentsHandler.Upload)
+		r.Get("/tasks/{id}/attachments", attachmentsHandler.List)
+		r.Delete("/tasks/{id}/attachments/{attId}", attachmentsHandler.Delete)
+	})
+
+	// Admin routes (JWT-protected + admin role required).
+	r.Group(func(r chi.Router) {
+		r.Use(auth.Authenticate(cfg.JWTSecret))
+		r.Use(auth.RequireAdmin)
+
+		r.Get("/admin/tasks", adminHandler.ListTasks)
+		r.Get("/admin/users", adminHandler.ListUsers)
 	})
 
 	return r

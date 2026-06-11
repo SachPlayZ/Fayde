@@ -6,8 +6,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/SachPlayZ/rivz-asn/backend/internal/activitylog"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/db"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/tasks"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
@@ -86,7 +88,10 @@ func createTestUser(t *testing.T, email string) string {
 }
 
 func newTaskService() *tasks.Service {
-	return tasks.NewService(tasks.NewRepository(testPool))
+	activityRepo := activitylog.NewRepository(testPool)
+	activitySvc := activitylog.NewService(activityRepo)
+	sseBroker := sse.NewBroker()
+	return tasks.NewService(tasks.NewRepository(testPool), activitySvc, sseBroker)
 }
 
 // TestOwnership verifies that user B cannot access a task owned by user A.

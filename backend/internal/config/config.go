@@ -8,15 +8,21 @@ import (
 
 // Config holds all application configuration values.
 type Config struct {
-	DatabaseURL string
-	JWTSecret   string
-	Port        string
-	CORSOrigin  string
+	DatabaseURL         string
+	JWTSecret           string
+	Port                string
+	CORSOrigin          string
+	AWSRegion           string
+	AWSAccessKeyID      string
+	AWSSecretAccessKey  string
+	S3Bucket            string
 }
 
 // Load reads configuration from environment variables.
 // DATABASE_URL and JWT_SECRET are required; PORT defaults to "8080"
 // and CORS_ORIGIN defaults to "http://localhost:3000".
+// AWS_* and S3_BUCKET are optional; if S3_BUCKET is empty, attachment
+// endpoints will return 501 Not Implemented.
 func Load() (*Config, error) {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -39,9 +45,13 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		DatabaseURL: dbURL,
-		JWTSecret:   jwtSecret,
-		Port:        port,
-		CORSOrigin:  corsOrigin,
+		DatabaseURL:        dbURL,
+		JWTSecret:          jwtSecret,
+		Port:               port,
+		CORSOrigin:         corsOrigin,
+		AWSRegion:          os.Getenv("AWS_REGION"),
+		AWSAccessKeyID:     os.Getenv("AWS_ACCESS_KEY_ID"),
+		AWSSecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
+		S3Bucket:           os.Getenv("S3_BUCKET"),
 	}, nil
 }

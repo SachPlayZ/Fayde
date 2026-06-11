@@ -28,11 +28,11 @@ func (r *pgRepository) CreateUser(ctx context.Context, email, passwordHash strin
 	const q = `
 		INSERT INTO users (email, password_hash)
 		VALUES ($1, $2)
-		RETURNING id, email, password_hash, created_at`
+		RETURNING id, email, password_hash, role, created_at`
 
 	u := &User{}
 	err := r.pool.QueryRow(ctx, q, email, passwordHash).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("auth: create user: %w", err)
 	}
@@ -42,11 +42,11 @@ func (r *pgRepository) CreateUser(ctx context.Context, email, passwordHash strin
 
 // GetUserByEmail fetches a user by email address.
 func (r *pgRepository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
-	const q = `SELECT id, email, password_hash, created_at FROM users WHERE email = $1`
+	const q = `SELECT id, email, password_hash, role, created_at FROM users WHERE email = $1`
 
 	u := &User{}
 	err := r.pool.QueryRow(ctx, q, email).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("auth: get user by email: %w", err)
 	}
@@ -56,11 +56,11 @@ func (r *pgRepository) GetUserByEmail(ctx context.Context, email string) (*User,
 
 // GetUserByID fetches a user by primary key.
 func (r *pgRepository) GetUserByID(ctx context.Context, id string) (*User, error) {
-	const q = `SELECT id, email, password_hash, created_at FROM users WHERE id = $1`
+	const q = `SELECT id, email, password_hash, role, created_at FROM users WHERE id = $1`
 
 	u := &User{}
 	err := r.pool.QueryRow(ctx, q, id).
-		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.CreatedAt)
+		Scan(&u.ID, &u.Email, &u.PasswordHash, &u.Role, &u.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("auth: get user by id: %w", err)
 	}

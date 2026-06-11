@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/SachPlayZ/rivz-asn/backend/internal/activitylog"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/httputil"
 	"github.com/go-chi/chi/v5"
@@ -15,15 +16,17 @@ import (
 
 // Handler handles HTTP requests for task endpoints.
 type Handler struct {
-	svc      *Service
-	validate *validator.Validate
+	svc         *Service
+	activitySvc *activitylog.Service
+	validate    *validator.Validate
 }
 
 // NewHandler creates a new tasks Handler.
-func NewHandler(svc *Service) *Handler {
+func NewHandler(svc *Service, activitySvc *activitylog.Service) *Handler {
 	return &Handler{
-		svc:      svc,
-		validate: validator.New(),
+		svc:         svc,
+		activitySvc: activitySvc,
+		validate:    validator.New(),
 	}
 }
 
@@ -160,6 +163,39 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetActivity handles GET /tasks/{id}/activity.
+// Returns the activity log for a task. Accessible by the task owner or an admin.
+func (h *Handler) GetActivity(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	role := auth.UserRoleFromContext(r.Context())
+
+	// Non-admins must own the task.
+	if role != "admin" {
+		if _, err := h.svc.GetTask(r.Context(), id, userID); err != nil {
+			if errors.Is(err, ErrNotFound) || isNoRowsError(err) {
+				httputil.Error(w, http.StatusNotFound, "task not found")
+				return
+			}
+			httputil.Error(w, http.StatusInternalServerError, "failed to get task")
+			return
+		}
+	}
+
+	logs, err := h.activitySvc.ListByTask(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, http.StatusInternalServerError, "failed to get activity")
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, logs)
 }
 
 // validationFields converts validator.ValidationErrors into a field→tag map.

@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	bcryptCost    = 12
-	tokenExpiry   = 72 * time.Hour
+	bcryptCost  = 12
+	tokenExpiry = 72 * time.Hour
 )
 
 // Service handles business logic for user authentication.
@@ -43,7 +43,7 @@ func (s *Service) Signup(ctx context.Context, email, password string) (*SignupRe
 		return nil, err
 	}
 
-	token, err := GenerateToken(user.ID, s.jwtSecret, tokenExpiry)
+	token, err := GenerateToken(user.ID, user.Role, s.jwtSecret, tokenExpiry)
 	if err != nil {
 		return nil, err
 	}
@@ -69,7 +69,7 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResu
 		return nil, ErrInvalidCredentials
 	}
 
-	token, err := GenerateToken(user.ID, s.jwtSecret, tokenExpiry)
+	token, err := GenerateToken(user.ID, user.Role, s.jwtSecret, tokenExpiry)
 	if err != nil {
 		return nil, err
 	}

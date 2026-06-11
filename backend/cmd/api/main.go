@@ -11,10 +11,14 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/SachPlayZ/rivz-asn/backend/internal/activitylog"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/admin"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/attachments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/config"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/db"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/server"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/tasks"
 )
 
@@ -45,25 +49,60 @@ func run() error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	// Wire dependencies.
+	// Wire auth dependencies.
 	authRepo := auth.NewRepository(pool)
 	authSvc := auth.NewService(authRepo, cfg.JWTSecret)
 	authHandler := auth.NewHandler(authSvc)
 
+	// Wire activity log dependencies.
+	activityRepo := activitylog.NewRepository(pool)
+	activitySvc := activitylog.NewService(activityRepo)
+
+	// Wire SSE broker.
+	sseBroker := sse.NewBroker()
+	sseHandler := sse.NewHandler(sseBroker, cfg.JWTSecret)
+
+	// Wire tasks dependencies.
 	tasksRepo := tasks.NewRepository(pool)
-	tasksSvc := tasks.NewService(tasksRepo)
-	tasksHandler := tasks.NewHandler(tasksSvc)
+	tasksSvc := tasks.NewService(tasksRepo, activitySvc, sseBroker)
+	tasksHandler := tasks.NewHandler(tasksSvc, activitySvc)
+
+	// Wire admin dependencies.
+	adminHandler := admin.NewHandler(pool)
+
+	// Wire attachment dependencies.
+	attachmentsRepo := attachments.NewRepository(pool)
+	var attachmentsSvc *attachments.Service
+	var s3Client *attachments.S3Client
+
+	if cfg.S3Bucket != "" {
+		s3Client, err = attachments.NewS3Client(
+			context.Background(),
+			cfg.AWSRegion,
+			cfg.AWSAccessKeyID,
+			cfg.AWSSecretAccessKey,
+			cfg.S3Bucket,
+		)
+		if err != nil {
+			return fmt.Errorf("init s3 client: %w", err)
+		}
+		attachmentsSvc = attachments.NewService(attachmentsRepo, s3Client)
+	} else {
+		// Provide a nil-service; the handler checks s3Bucket and returns 501.
+		attachmentsSvc = attachments.NewService(attachmentsRepo, nil)
+	}
+	attachmentsHandler := attachments.NewHandler(attachmentsSvc, tasksSvc, cfg.S3Bucket)
 
 	handler := server.New(server.ServerConfig{
 		JWTSecret:  cfg.JWTSecret,
 		CORSOrigin: cfg.CORSOrigin,
-	}, authHandler, tasksHandler)
+	}, authHandler, tasksHandler, adminHandler, sseHandler, attachmentsHandler)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 0, // 0 = no write timeout (needed for SSE long-lived connections)
 		IdleTimeout:  60 * time.Second,
 	}
 

@@ -11,36 +11,33 @@ import { TaskForm } from "./TaskForm";
 const statusConfig = {
   todo: {
     label: "Todo",
-    className:
-      "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
+    className: "bg-secondary text-secondary-foreground",
   },
   in_progress: {
     label: "In Progress",
-    className:
-      "bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+    className: "bg-secondary text-foreground font-medium",
   },
   done: {
     label: "Done",
-    className:
-      "bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+    className: "bg-secondary text-muted-foreground line-through",
   },
 };
 
 const priorityConfig = {
   low: {
     label: "Low",
-    dot: "bg-green-500",
-    text: "text-green-700 dark:text-green-400",
+    dot: "bg-muted-foreground/50",
+    text: "text-muted-foreground",
   },
   medium: {
     label: "Medium",
-    dot: "bg-amber-500",
-    text: "text-amber-700 dark:text-amber-400",
+    dot: "bg-foreground/60",
+    text: "text-foreground/80",
   },
   high: {
     label: "High",
-    dot: "bg-red-500",
-    text: "text-red-600 dark:text-red-400",
+    dot: "bg-destructive",
+    text: "text-destructive",
   },
 };
 

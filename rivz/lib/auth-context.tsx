@@ -8,7 +8,7 @@ import {
 } from "react";
 import { api } from "./api";
 
-type User = { id: string; email: string };
+type User = { id: string; email: string; role: string };
 type AuthCtx = {
   user: User | null;
   token: string | null;
@@ -43,10 +43,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     api
-      .get<{ id: string; email: string }>("/auth/me")
+      .get<{ id: string; email: string; role: string }>("/auth/me")
       .then((u) => {
         setToken(stored);
-        setUser(u);
+        setUser({ id: u.id, email: u.email, role: u.role ?? "user" });
       })
       .catch(() => localStorage.removeItem("token"))
       .finally(() => setLoading(false));

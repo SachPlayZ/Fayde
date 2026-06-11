@@ -10,8 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { toast } from "sonner";
-import { CheckSquare } from "lucide-react";
-
 export default function LoginPage() {
   const { login } = useAuth();
   const router = useRouter();
@@ -27,11 +25,11 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginInput) => {
     try {
-      const res = await api.post<{ token: string; user: { id: string; email: string } }>(
+      const res = await api.post<{ token: string; user: { id: string; email: string; role: string } }>(
         "/auth/login",
         data
       );
-      login(res.token, res.user);
+      login(res.token, { ...res.user, role: res.user.role ?? "user" });
       router.replace("/tasks");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -51,11 +49,7 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
-        {/* Brand */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center justify-center w-11 h-11 rounded-xl bg-primary mb-4 shadow-sm">
-            <CheckSquare className="w-5 h-5 text-primary-foreground" />
-          </div>
+        <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Sign in to your TaskFlow account
@@ -105,7 +99,7 @@ export default function LoginPage() {
           Don&apos;t have an account?{" "}
           <Link
             href="/signup"
-            className="font-medium text-primary hover:text-primary/80 transition-colors"
+            className="font-medium text-foreground underline underline-offset-4 hover:text-muted-foreground transition-colors"
           >
             Create one
           </Link>

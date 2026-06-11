@@ -6,12 +6,18 @@ import { ThemeToggle } from "@/app/(app)/_components/ThemeToggle";
 import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export default function AppLayout({ children }: { children: React.ReactNode }) {
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) router.replace("/login");
+    if (!loading && !user) {
+      router.replace("/login");
+      return;
+    }
+    if (!loading && user && user.role !== "admin") {
+      router.replace("/tasks");
+    }
   }, [user, loading, router]);
 
   if (loading) {
@@ -25,7 +31,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!user) return null;
+  if (!user || user.role !== "admin") return null;
 
   const initials = user.email.slice(0, 2).toUpperCase();
 
@@ -33,7 +39,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="font-semibold text-sm tracking-tight">TaskFlow</span>
+          <span className="font-semibold text-sm tracking-tight">
+            TaskFlow <span className="text-muted-foreground font-normal">/ Admin</span>
+          </span>
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground hidden sm:block">
