@@ -14,12 +14,14 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Search, Users, ClipboardList, CheckCircle2, Clock, Circle, ShieldCheck } from "lucide-react";
+import { Search, Users, ClipboardList, CheckCircle2, Clock, Circle, ShieldCheck, BarChart2 } from "lucide-react";
+import { AnalyticsTab } from "./_components/AnalyticsTab";
 
 const statusConfig = {
   todo: { label: "Todo", className: "bg-muted text-muted-foreground" },
   in_progress: { label: "In Progress", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
   done: { label: "Done", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  failed: { label: "Failed", className: "bg-rose-500/10 text-rose-600 dark:text-rose-400" },
 };
 
 const priorityConfig = {
@@ -54,6 +56,7 @@ const statusFilters = [
   { value: "todo", label: "Todo" },
   { value: "in_progress", label: "In Progress" },
   { value: "done", label: "Done" },
+  { value: "failed", label: "Failed" },
 ];
 
 function AllTasksTab() {
@@ -313,12 +316,19 @@ export default function AdminPage() {
             <Users className="size-3.5 mr-1.5" />
             Users
           </TabsTrigger>
+          <TabsTrigger value="analytics" className="rounded-lg text-xs">
+            <BarChart2 className="size-3.5 mr-1.5" />
+            Analytics
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="tasks">
           <AllTasksTab />
         </TabsContent>
         <TabsContent value="users">
           <UsersTab />
+        </TabsContent>
+        <TabsContent value="analytics">
+          <div className="mt-4"><AnalyticsTab /></div>
         </TabsContent>
       </Tabs>
     </div>

@@ -101,7 +101,34 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.JSON(w, http.StatusOK, PublicUser{ID: user.ID, Email: user.Email, Role: user.Role})
+	httputil.JSON(w, http.StatusOK, PublicUser{
+		ID: user.ID, Email: user.Email, Role: user.Role,
+		Theme: user.Theme, DigestEnabled: user.DigestEnabled,
+	})
+}
+
+// UpdatePreferences handles PATCH /auth/me/preferences.
+func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var body struct {
+		Theme         *string `json:"theme"`
+		DigestEnabled *bool   `json:"digest_enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+
+	if err := h.svc.UpdatePreferences(r.Context(), userID, body.Theme, body.DigestEnabled); err != nil {
+		httputil.Error(w, http.StatusInternalServerError, "failed to update preferences")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // validationFields converts validator.ValidationErrors into a string map.

@@ -165,8 +165,70 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// Reorder handles PUT /tasks/reorder.
+func (h *Handler) Reorder(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var items []ReorderItem
+	if err := json.NewDecoder(r.Body).Decode(&items); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+
+	if err := h.svc.Reorder(r.Context(), userID, items); err != nil {
+		httputil.Error(w, http.StatusInternalServerError, "failed to reorder tasks")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// BulkUpdate handles POST /tasks/bulk-update.
+func (h *Handler) BulkUpdate(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req BulkUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+
+	if err := h.svc.BulkUpdate(r.Context(), userID, req); err != nil {
+		httputil.Error(w, http.StatusInternalServerError, "failed to bulk update")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// BulkDelete handles POST /tasks/bulk-delete.
+func (h *Handler) BulkDelete(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req BulkDeleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+
+	if err := h.svc.BulkDelete(r.Context(), userID, req.IDs); err != nil {
+		httputil.Error(w, http.StatusInternalServerError, "failed to bulk delete")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // GetActivity handles GET /tasks/{id}/activity.
-// Returns the activity log for a task. Accessible by the task owner or an admin.
 func (h *Handler) GetActivity(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {
@@ -177,7 +239,6 @@ func (h *Handler) GetActivity(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	role := auth.UserRoleFromContext(r.Context())
 
-	// Non-admins must own the task.
 	if role != "admin" {
 		if _, err := h.svc.GetTask(r.Context(), id, userID); err != nil {
 			if errors.Is(err, ErrNotFound) || isNoRowsError(err) {
@@ -199,7 +260,6 @@ func (h *Handler) GetActivity(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetUserActivity handles GET /activity.
-// Returns all activity logs across all tasks owned by the authenticated user.
 func (h *Handler) GetUserActivity(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if userID == "" {

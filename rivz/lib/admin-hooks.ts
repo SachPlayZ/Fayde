@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
+import type { Tag } from "./tags-hooks";
 
 export type AdminTask = {
   id: string;
@@ -7,9 +8,17 @@ export type AdminTask = {
   user_email: string;
   title: string;
   description: string;
-  status: "todo" | "in_progress" | "done";
+  status: "todo" | "in_progress" | "done" | "failed";
   priority: "low" | "medium" | "high";
   due_date: string | null;
+  recurrence: string | null;
+  recurrence_end: string | null;
+  assignee_id: string | null;
+  assignee_email: string | null;
+  sort_order: number;
+  tags: Tag[];
+  subtask_count: number;
+  subtasks_done: number;
   created_at: string;
   updated_at: string;
 };
@@ -52,9 +61,10 @@ export function useAdminTasks(params?: {
   });
 }
 
-export function useAdminUsers() {
+export function useAdminUsers(enabled = true) {
   return useQuery<AdminUser[]>({
     queryKey: ["admin", "users"],
     queryFn: () => api.get<AdminUser[]>("/admin/users"),
+    enabled,
   });
 }

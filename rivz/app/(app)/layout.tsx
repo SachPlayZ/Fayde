@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/app/(app)/_components/ThemeToggle";
 import { ActivitySidebar } from "@/app/(app)/_components/ActivitySidebar";
+import { NotificationsBell } from "@/components/NotificationsBell";
+import { CommandPaletteProvider } from "@/components/CommandPalette";
 import { LogOut, Activity, ShieldCheck } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
@@ -33,6 +35,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const initials = user.email.slice(0, 2).toUpperCase();
 
   return (
+    <CommandPaletteProvider>
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -54,6 +57,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 Admin
               </Link>
             )}
+            <NotificationsBell />
             <ThemeToggle />
             <Button
               variant="ghost"
@@ -77,5 +81,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <ActivitySidebar open={activityOpen} onClose={() => setActivityOpen(false)} />
     </div>
+    </CommandPaletteProvider>
   );
 }

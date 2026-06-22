@@ -13,16 +13,40 @@ import (
 
 var validate = validator.New()
 
+// NotificationsService is the interface used by tasks.Service to send notifications.
+// Using an interface prevents an import cycle (notifications imports sse; tasks imports notifications).
+type NotificationsService interface {
+	Create(ctx context.Context, userID, nType string, taskID *string, message string)
+}
+
+// DependenciesService is used to check/notify when a task completes.
+type DependenciesService interface {
+	NotifyUnblocked(ctx context.Context, doneTaskID, ownerUserID string)
+}
+
 // Service handles business logic for task operations.
 type Service struct {
-	repo        Repository
-	activitySvc *activitylog.Service
-	sseBroker   *sse.Broker
+	repo          Repository
+	activitySvc   *activitylog.Service
+	sseBroker     *sse.Broker
+	notifSvc      NotificationsService
+	depsSvc       DependenciesService
 }
 
 // NewService creates a new tasks Service.
 func NewService(repo Repository, activitySvc *activitylog.Service, sseBroker *sse.Broker) *Service {
 	return &Service{repo: repo, activitySvc: activitySvc, sseBroker: sseBroker}
+}
+
+// SetNotificationsService wires in the notifications dependency post-construction
+// to avoid circular init order.
+func (s *Service) SetNotificationsService(notifSvc NotificationsService) {
+	s.notifSvc = notifSvc
+}
+
+// SetDependenciesService wires in the dependencies dependency.
+func (s *Service) SetDependenciesService(depsSvc DependenciesService) {
+	s.depsSvc = depsSvc
 }
 
 // CreateTask creates a new task for the given user.
@@ -40,6 +64,12 @@ func (s *Service) CreateTask(ctx context.Context, userID string, req CreateReque
 	}
 
 	s.sseBroker.Publish(userID, sse.Event{Type: "task.created", Payload: task})
+
+	// Notify assignee if assigned to someone else.
+	if task.AssigneeID != nil && *task.AssigneeID != userID && s.notifSvc != nil {
+		msg := fmt.Sprintf("You were assigned task: %s", task.Title)
+		s.notifSvc.Create(ctx, *task.AssigneeID, "assigned", &task.ID, msg)
+	}
 
 	return task, nil
 }
@@ -72,7 +102,6 @@ func (s *Service) GetTask(ctx context.Context, id, userID string) (*Task, error)
 
 // UpdateTask applies a partial update to a task and logs changed fields.
 func (s *Service) UpdateTask(ctx context.Context, id, userID string, req UpdateRequest) (*Task, error) {
-	// Fetch old task to compute diff.
 	old, err := s.repo.GetTask(ctx, id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("service: get task for update: %w", err)
@@ -92,6 +121,24 @@ func (s *Service) UpdateTask(ctx context.Context, id, userID string, req UpdateR
 
 	s.sseBroker.Publish(userID, sse.Event{Type: "task.updated", Payload: task})
 
+	// Assignee notification.
+	if req.AssigneeID != nil && *req.AssigneeID != "" && *req.AssigneeID != userID && s.notifSvc != nil {
+		if old.AssigneeID == nil || *old.AssigneeID != *req.AssigneeID {
+			msg := fmt.Sprintf("You were assigned task: %s", task.Title)
+			s.notifSvc.Create(ctx, *req.AssigneeID, "assigned", &task.ID, msg)
+		}
+	}
+
+	// Recurring task: if status flipped to done, spawn next instance.
+	if req.Status != nil && *req.Status == "done" && task.Recurrence != nil && *task.Recurrence != "" {
+		s.spawnRecurrence(ctx, task)
+	}
+
+	// Dependencies: check if completing unblocks dependents.
+	if req.Status != nil && *req.Status == "done" && s.depsSvc != nil {
+		s.depsSvc.NotifyUnblocked(ctx, task.ID, userID)
+	}
+
 	return task, nil
 }
 
@@ -110,8 +157,66 @@ func (s *Service) DeleteTask(ctx context.Context, id, userID string) error {
 	return nil
 }
 
+// Reorder bulk-updates sort_order for tasks owned by userID.
+func (s *Service) Reorder(ctx context.Context, userID string, items []ReorderItem) error {
+	return s.repo.Reorder(ctx, userID, items)
+}
+
+// BulkUpdate updates status/priority for multiple tasks.
+func (s *Service) BulkUpdate(ctx context.Context, userID string, req BulkUpdateRequest) error {
+	if err := s.repo.BulkUpdate(ctx, userID, req); err != nil {
+		return err
+	}
+	s.sseBroker.Publish(userID, sse.Event{Type: "tasks.bulk_updated", Payload: req.IDs})
+	return nil
+}
+
+// BulkDelete deletes multiple tasks.
+func (s *Service) BulkDelete(ctx context.Context, userID string, ids []string) error {
+	if err := s.repo.BulkDelete(ctx, userID, ids); err != nil {
+		return err
+	}
+	s.sseBroker.Publish(userID, sse.Event{Type: "tasks.bulk_deleted", Payload: ids})
+	return nil
+}
+
+// spawnRecurrence clones the task with the next due date.
+func (s *Service) spawnRecurrence(ctx context.Context, t *Task) {
+	next := advanceDueDate(t.DueDate, *t.Recurrence)
+	if next == nil {
+		return
+	}
+	if t.RecurrenceEnd != nil && next.After(*t.RecurrenceEnd) {
+		return
+	}
+	clone := *t
+	clone.DueDate = next
+	if _, err := s.repo.CloneForRecurrence(ctx, &clone); err != nil {
+		log.Printf("tasks: spawn recurrence: %v", err)
+		return
+	}
+	s.sseBroker.Publish(t.UserID, sse.Event{Type: "task.created", Payload: nil})
+}
+
+func advanceDueDate(due *time.Time, recurrence string) *time.Time {
+	if due == nil {
+		return nil
+	}
+	var next time.Time
+	switch recurrence {
+	case "daily":
+		next = due.AddDate(0, 0, 1)
+	case "weekly":
+		next = due.AddDate(0, 0, 7)
+	case "monthly":
+		next = due.AddDate(0, 1, 0)
+	default:
+		return nil
+	}
+	return &next
+}
+
 // buildChanges computes a map of changed fields from old task and update request.
-// Each entry is [oldValue, newValue].
 func buildChanges(old *Task, req UpdateRequest) map[string][2]interface{} {
 	changes := make(map[string][2]interface{})
 

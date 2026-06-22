@@ -160,6 +160,104 @@ func (h *Handler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type analyticsResponse struct {
+	ByStatus         map[string]int       `json:"by_status"`
+	ByPriority       map[string]int       `json:"by_priority"`
+	CompletionRate7d []dailyStat          `json:"completion_rate_7d"`
+	OverdueByUser    []overdueUserStat    `json:"overdue_by_user"`
+}
+
+type dailyStat struct {
+	Date    string `json:"date"`
+	Done    int    `json:"done"`
+	Created int    `json:"created"`
+}
+
+type overdueUserStat struct {
+	UserEmail string `json:"user_email"`
+	Count     int    `json:"count"`
+	OldestDue string `json:"oldest_due"`
+}
+
+// Analytics handles GET /admin/analytics.
+func (h *Handler) Analytics(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	resp := analyticsResponse{
+		ByStatus:         map[string]int{"todo": 0, "in_progress": 0, "done": 0, "failed": 0},
+		ByPriority:       map[string]int{"low": 0, "medium": 0, "high": 0},
+		CompletionRate7d: []dailyStat{},
+		OverdueByUser:    []overdueUserStat{},
+	}
+
+	// By status
+	rows, err := h.pool.Query(ctx, `SELECT status::text, COUNT(*) FROM tasks GROUP BY status`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var s string
+			var c int
+			if rows.Scan(&s, &c) == nil {
+				resp.ByStatus[s] = c
+			}
+		}
+	}
+
+	// By priority
+	rows2, err := h.pool.Query(ctx, `SELECT priority::text, COUNT(*) FROM tasks GROUP BY priority`)
+	if err == nil {
+		defer rows2.Close()
+		for rows2.Next() {
+			var p string
+			var c int
+			if rows2.Scan(&p, &c) == nil {
+				resp.ByPriority[p] = c
+			}
+		}
+	}
+
+	// 7-day completion rate
+	rows3, err := h.pool.Query(ctx, `
+		WITH days AS (
+			SELECT generate_series(
+				(CURRENT_DATE - INTERVAL '6 days')::date,
+				CURRENT_DATE::date,
+				'1 day'::interval
+			)::date AS d
+		)
+		SELECT days.d::text,
+			COUNT(CASE WHEN t.status='done' AND t.updated_at::date=days.d THEN 1 END) AS done,
+			COUNT(CASE WHEN t.created_at::date=days.d THEN 1 END) AS created
+		FROM days LEFT JOIN tasks t ON true
+		GROUP BY days.d ORDER BY days.d`)
+	if err == nil {
+		defer rows3.Close()
+		for rows3.Next() {
+			var ds dailyStat
+			if rows3.Scan(&ds.Date, &ds.Done, &ds.Created) == nil {
+				resp.CompletionRate7d = append(resp.CompletionRate7d, ds)
+			}
+		}
+	}
+
+	// Overdue by user
+	rows4, err := h.pool.Query(ctx, `
+		SELECT u.email, COUNT(t.id), MIN(t.due_date)::text
+		FROM tasks t JOIN users u ON u.id=t.user_id
+		WHERE t.due_date < now() AND t.status NOT IN ('done','failed')
+		GROUP BY u.email ORDER BY COUNT(t.id) DESC`)
+	if err == nil {
+		defer rows4.Close()
+		for rows4.Next() {
+			var s overdueUserStat
+			if rows4.Scan(&s.UserEmail, &s.Count, &s.OldestDue) == nil {
+				resp.OverdueByUser = append(resp.OverdueByUser, s)
+			}
+		}
+	}
+
+	httputil.JSON(w, http.StatusOK, resp)
+}
+
 // ListUsers handles GET /admin/users.
 // Returns all users with id, email, role, created_at, and task_count.
 func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {

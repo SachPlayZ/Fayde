@@ -1,0 +1,157 @@
+package scheduler
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"html/template"
+	"log"
+	"net/smtp"
+	"time"
+
+	"github.com/SachPlayZ/rivz-asn/backend/internal/config"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/notifications"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+const digestTmpl = `<!DOCTYPE html>
+<html><body>
+<h2>Daily Task Digest</h2>
+<p>Here is your task summary for {{.Date}}:</p>
+{{if .Overdue}}<h3>Overdue ({{len .Overdue}})</h3><ul>{{range .Overdue}}<li>{{.Title}} — due {{.Due}}</li>{{end}}</ul>{{end}}
+{{if .DueToday}}<h3>Due Today ({{len .DueToday}})</h3><ul>{{range .DueToday}}<li>{{.Title}}</li>{{end}}</ul>{{end}}
+</body></html>`
+
+type taskItem struct {
+	Title string
+	Due   string
+}
+
+func Start(ctx context.Context, pool *pgxpool.Pool, notifSvc *notifications.Service, cfg *config.Config) {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case t := <-ticker.C:
+			runTick(ctx, pool, notifSvc, cfg, t)
+		}
+	}
+}
+
+func runTick(ctx context.Context, pool *pgxpool.Pool, notifSvc *notifications.Service, cfg *config.Config, now time.Time) {
+	// Due reminders
+	sendDueReminders(ctx, pool, notifSvc, now)
+	// Daily digest at 8am UTC
+	if now.UTC().Hour() == 8 {
+		sendDailyDigests(ctx, pool, cfg, now)
+	}
+}
+
+func sendDueReminders(ctx context.Context, pool *pgxpool.Pool, notifSvc *notifications.Service, now time.Time) {
+	const q = `SELECT id, user_id, title FROM tasks
+		WHERE due_date BETWEEN $1 AND $2
+		AND status NOT IN ('done','failed')`
+	rows, err := pool.Query(ctx, q, now, now.Add(24*time.Hour))
+	if err != nil {
+		log.Printf("scheduler: due reminders query: %v", err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, userID, title string
+		if err := rows.Scan(&id, &userID, &title); err != nil {
+			continue
+		}
+		since := now.Add(-23 * time.Hour)
+		exists, err := notifSvc.ExistsRecent(ctx, id, "due_reminder", since)
+		if err != nil || exists {
+			continue
+		}
+		msg := fmt.Sprintf("Task \"%s\" is due within 24 hours", title)
+		notifSvc.Create(ctx, userID, "due_reminder", &id, msg)
+	}
+}
+
+type digestData struct {
+	Date     string
+	Overdue  []taskItem
+	DueToday []taskItem
+}
+
+func sendDailyDigests(ctx context.Context, pool *pgxpool.Pool, cfg *config.Config, now time.Time) {
+	if cfg.SMTPHost == "" {
+		return
+	}
+	const q = `SELECT id, email FROM users WHERE digest_enabled=true`
+	rows, err := pool.Query(ctx, q)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	tmpl, _ := template.New("digest").Parse(digestTmpl)
+
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	todayEnd := todayStart.Add(24 * time.Hour)
+
+	for rows.Next() {
+		var userID, email string
+		if err := rows.Scan(&userID, &email); err != nil {
+			continue
+		}
+		data := buildDigest(ctx, pool, userID, now, todayStart, todayEnd)
+		if len(data.Overdue) == 0 && len(data.DueToday) == 0 {
+			continue
+		}
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, data); err != nil {
+			continue
+		}
+		sendEmail(cfg, email, "Your Daily Task Digest", buf.String())
+	}
+}
+
+func buildDigest(ctx context.Context, pool *pgxpool.Pool, userID string, now time.Time, todayStart, todayEnd time.Time) digestData {
+	data := digestData{Date: now.Format("Jan 2, 2006")}
+
+	overdueRows, _ := pool.Query(ctx,
+		`SELECT title, due_date FROM tasks WHERE user_id=$1 AND due_date < $2 AND status NOT IN ('done','failed')`,
+		userID, now)
+	if overdueRows != nil {
+		defer overdueRows.Close()
+		for overdueRows.Next() {
+			var title string
+			var due time.Time
+			if overdueRows.Scan(&title, &due) == nil {
+				data.Overdue = append(data.Overdue, taskItem{Title: title, Due: due.Format("Jan 2")})
+			}
+		}
+	}
+
+	todayRows, _ := pool.Query(ctx,
+		`SELECT title FROM tasks WHERE user_id=$1 AND due_date >= $2 AND due_date < $3 AND status NOT IN ('done','failed')`,
+		userID, todayStart, todayEnd)
+	if todayRows != nil {
+		defer todayRows.Close()
+		for todayRows.Next() {
+			var title string
+			if todayRows.Scan(&title) == nil {
+				data.DueToday = append(data.DueToday, taskItem{Title: title})
+			}
+		}
+	}
+
+	return data
+}
+
+func sendEmail(cfg *config.Config, to, subject, htmlBody string) {
+	auth := smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)
+	msg := fmt.Sprintf("From: %s\r\nTo: %s\r\nSubject: %s\r\nContent-Type: text/html; charset=utf-8\r\n\r\n%s",
+		cfg.FromEmail, to, subject, htmlBody)
+	addr := fmt.Sprintf("%s:%s", cfg.SMTPHost, cfg.SMTPPort)
+	if err := smtp.SendMail(addr, auth, cfg.FromEmail, []string{to}, []byte(msg)); err != nil {
+		log.Printf("scheduler: send email to %s: %v", to, err)
+	}
+}

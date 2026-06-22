@@ -81,3 +81,8 @@ func (s *Service) Login(ctx context.Context, email, password string) (*LoginResu
 func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
 	return s.repo.GetUserByID(ctx, id)
 }
+
+// UpdatePreferences updates user preferences.
+func (s *Service) UpdatePreferences(ctx context.Context, id string, theme *string, digestEnabled *bool) error {
+	return s.repo.UpdatePreferences(ctx, id, theme, digestEnabled)
+}

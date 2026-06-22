@@ -10,9 +10,12 @@ export const signupSchema = loginSchema;
 export const taskSchema = z.object({
   title: z.string().min(1, "Title required"),
   description: z.string().optional(),
-  status: z.enum(["todo", "in_progress", "done"]).optional(),
+  status: z.enum(["todo", "in_progress", "done", "failed"]).optional(),
   priority: z.enum(["low", "medium", "high"]).optional(),
   due_date: z.string().optional().nullable(),
+  recurrence: z.enum(["daily", "weekly", "monthly"]).optional().nullable(),
+  recurrence_end: z.string().optional().nullable(),
+  assignee_id: z.string().optional().nullable(),
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

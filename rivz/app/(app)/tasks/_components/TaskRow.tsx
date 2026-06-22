@@ -21,6 +21,10 @@ const statusConfig = {
     label: "Done",
     className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   },
+  failed: {
+    label: "Failed",
+    className: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+  },
 };
 
 const priorityConfig = {
@@ -79,9 +83,15 @@ function isOverdue(dateStr: string | null) {
   return new Date(dateStr) < new Date();
 }
 
-type TaskRowProps = { task: Task; index?: number; search?: string };
+type TaskRowProps = {
+  task: Task;
+  index?: number;
+  search?: string;
+  selected?: boolean;
+  onSelectChange?: (id: string, checked: boolean) => void;
+};
 
-export function TaskRow({ task, index = 0, search = "" }: TaskRowProps) {
+export function TaskRow({ task, index = 0, search = "", selected = false, onSelectChange }: TaskRowProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const updateTask = useUpdateTask();
@@ -119,13 +129,23 @@ export function TaskRow({ task, index = 0, search = "" }: TaskRowProps) {
         style={{ animationDelay: `${index * 40}ms` }}
       >
         <TableCell className="w-8">
-          <input
-            type="checkbox"
-            checked={isDone}
-            onChange={handleToggleDone}
-            className="size-4 rounded border-input accent-primary cursor-pointer"
-            aria-label={`Mark "${task.title}" as ${isDone ? "not done" : "done"}`}
-          />
+          {onSelectChange ? (
+            <input
+              type="checkbox"
+              checked={selected}
+              onChange={(e) => onSelectChange(task.id, e.target.checked)}
+              className="size-4 rounded border-input accent-primary cursor-pointer"
+              aria-label={`Select "${task.title}"`}
+            />
+          ) : (
+            <input
+              type="checkbox"
+              checked={isDone}
+              onChange={handleToggleDone}
+              className="size-4 rounded border-input accent-primary cursor-pointer"
+              aria-label={`Mark "${task.title}" as ${isDone ? "not done" : "done"}`}
+            />
+          )}
         </TableCell>
 
         <TableCell>

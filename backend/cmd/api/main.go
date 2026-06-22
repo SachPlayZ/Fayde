@@ -1,4 +1,3 @@
-// Command api starts the task-management REST API server.
 package main
 
 import (
@@ -15,10 +14,16 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/admin"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/attachments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/comments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/config"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/db"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/dependencies"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/notifications"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/scheduler"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/server"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/subtasks"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/tags"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/tasks"
 )
 
@@ -43,70 +48,93 @@ func run() error {
 	}
 	defer pool.Close()
 
-	// Convert postgres:// URL to pgx5:// scheme required by golang-migrate.
 	migrateURL := toPgx5URL(cfg.DatabaseURL)
 	if err := db.RunMigrations(migrateURL); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	// Wire auth dependencies.
+	// Auth.
 	authRepo := auth.NewRepository(pool)
 	authSvc := auth.NewService(authRepo, cfg.JWTSecret)
 	authHandler := auth.NewHandler(authSvc)
 
-	// Wire activity log dependencies.
+	// Activity log.
 	activityRepo := activitylog.NewRepository(pool)
 	activitySvc := activitylog.NewService(activityRepo)
 
-	// Wire SSE broker.
+	// SSE.
 	sseBroker := sse.NewBroker()
 	sseHandler := sse.NewHandler(sseBroker, cfg.JWTSecret)
 
-	// Wire tasks dependencies.
+	// Notifications (wired first; injected into tasks, comments, deps).
+	notifRepo := notifications.NewRepository(pool)
+	notifSvc := notifications.NewService(notifRepo, sseBroker)
+	notifHandler := notifications.NewHandler(notifSvc)
+
+	// Tasks.
 	tasksRepo := tasks.NewRepository(pool)
 	tasksSvc := tasks.NewService(tasksRepo, activitySvc, sseBroker)
+	tasksSvc.SetNotificationsService(notifSvc)
 	tasksHandler := tasks.NewHandler(tasksSvc, activitySvc)
 
-	// Wire admin dependencies.
+	// Admin.
 	adminHandler := admin.NewHandler(pool)
 
-	// Wire attachment dependencies.
+	// Attachments.
 	attachmentsRepo := attachments.NewRepository(pool)
-	var attachmentsSvc *attachments.Service
 	var s3Client *attachments.S3Client
-
 	if cfg.S3Bucket != "" {
 		s3Client, err = attachments.NewS3Client(
 			context.Background(),
-			cfg.AWSRegion,
-			cfg.AWSAccessKeyID,
-			cfg.AWSSecretAccessKey,
-			cfg.S3Bucket,
+			cfg.AWSRegion, cfg.AWSAccessKeyID, cfg.AWSSecretAccessKey, cfg.S3Bucket,
 		)
 		if err != nil {
 			return fmt.Errorf("init s3 client: %w", err)
 		}
-		attachmentsSvc = attachments.NewService(attachmentsRepo, s3Client)
-	} else {
-		// Provide a nil-service; the handler checks s3Bucket and returns 501.
-		attachmentsSvc = attachments.NewService(attachmentsRepo, nil)
 	}
+	attachmentsSvc := attachments.NewService(attachmentsRepo, s3Client)
 	attachmentsHandler := attachments.NewHandler(attachmentsSvc, tasksSvc, cfg.S3Bucket)
+
+	// Subtasks.
+	subtasksRepo := subtasks.NewRepository(pool)
+	subtasksSvc := subtasks.NewService(subtasksRepo)
+	subtasksHandler := subtasks.NewHandler(subtasksSvc, tasksSvc)
+
+	// Tags.
+	tagsRepo := tags.NewRepository(pool)
+	tagsSvc := tags.NewService(tagsRepo)
+	tagsHandler := tags.NewHandler(tagsSvc)
+
+	// Comments.
+	commentsRepo := comments.NewRepository(pool)
+	commentsSvc := comments.NewService(commentsRepo, notifSvc, pool)
+	commentsHandler := comments.NewHandler(commentsSvc)
+
+	// Dependencies.
+	depsRepo := dependencies.NewRepository(pool)
+	depsSvc := dependencies.NewService(depsRepo, notifSvc)
+	depsHandler := dependencies.NewHandler(depsSvc)
+	tasksSvc.SetDependenciesService(depsSvc)
+
+	// Scheduler.
+	schedulerCtx, schedulerCancel := context.WithCancel(context.Background())
+	defer schedulerCancel()
+	go scheduler.Start(schedulerCtx, pool, notifSvc, cfg)
 
 	handler := server.New(server.ServerConfig{
 		JWTSecret:  cfg.JWTSecret,
 		CORSOrigin: cfg.CORSOrigin,
-	}, authHandler, tasksHandler, adminHandler, sseHandler, attachmentsHandler)
+	}, authHandler, tasksHandler, adminHandler, sseHandler, attachmentsHandler,
+		subtasksHandler, tagsHandler, commentsHandler, depsHandler, notifHandler)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 0, // 0 = no write timeout (needed for SSE long-lived connections)
+		WriteTimeout: 0,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Graceful shutdown.
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
@@ -119,6 +147,7 @@ func run() error {
 
 	<-quit
 	log.Println("shutting down server...")
+	schedulerCancel()
 
 	shutCtx, shutCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutCancel()
@@ -131,8 +160,6 @@ func run() error {
 	return nil
 }
 
-// toPgx5URL converts a postgres:// or postgresql:// URL to the pgx5:// scheme
-// used by golang-migrate's pgx/v5 driver.
 func toPgx5URL(u string) string {
 	for _, prefix := range []string{"postgresql://", "postgres://"} {
 		if len(u) > len(prefix) && u[:len(prefix)] == prefix {

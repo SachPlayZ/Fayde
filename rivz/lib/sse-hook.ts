@@ -1,19 +1,16 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-/**
- * useSSE connects to the backend's SSE endpoint using the JWT token from
- * localStorage. On each event it invalidates the tasks query so the UI
- * re-fetches fresh data. Reconnects automatically after a 3-second delay
- * if the connection drops. Cleans up on unmount.
- */
+export type SSEEvent = { type: string; payload: unknown };
+
 export function useSSE() {
   const qc = useQueryClient();
   const esRef = useRef<EventSource | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [lastEvent, setLastEvent] = useState<SSEEvent | null>(null);
 
   useEffect(() => {
     let destroyed = false;
@@ -29,9 +26,19 @@ export function useSSE() {
       const es = new EventSource(url);
       esRef.current = es;
 
-      es.onmessage = () => {
-        qc.invalidateQueries({ queryKey: ["tasks"] });
-        qc.invalidateQueries({ queryKey: ["activity", "global"] });
+      es.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data) as SSEEvent;
+          setLastEvent(data);
+          qc.invalidateQueries({ queryKey: ["tasks"] });
+          qc.invalidateQueries({ queryKey: ["activity", "global"] });
+          if (data.type === "notification") {
+            qc.invalidateQueries({ queryKey: ["notifications"] });
+            qc.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
+          }
+        } catch {
+          qc.invalidateQueries({ queryKey: ["tasks"] });
+        }
       };
 
       es.onerror = () => {
@@ -54,4 +61,6 @@ export function useSSE() {
       esRef.current = null;
     };
   }, [qc]);
+
+  return { lastEvent };
 }

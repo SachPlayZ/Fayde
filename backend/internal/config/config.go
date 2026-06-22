@@ -8,14 +8,19 @@ import (
 
 // Config holds all application configuration values.
 type Config struct {
-	DatabaseURL         string
-	JWTSecret           string
-	Port                string
-	CORSOrigin          string
-	AWSRegion           string
-	AWSAccessKeyID      string
-	AWSSecretAccessKey  string
-	S3Bucket            string
+	DatabaseURL        string
+	JWTSecret          string
+	Port               string
+	CORSOrigin         string
+	AWSRegion          string
+	AWSAccessKeyID     string
+	AWSSecretAccessKey string
+	S3Bucket           string
+	SMTPHost           string
+	SMTPPort           string
+	SMTPUser           string
+	SMTPPass           string
+	FromEmail          string
 }
 
 // Load reads configuration from environment variables.
@@ -44,6 +49,15 @@ func Load() (*Config, error) {
 		corsOrigin = "http://localhost:3000"
 	}
 
+	smtpPort := os.Getenv("SMTP_PORT")
+	if smtpPort == "" {
+		smtpPort = "587"
+	}
+	fromEmail := os.Getenv("FROM_EMAIL")
+	if fromEmail == "" {
+		fromEmail = os.Getenv("SMTP_USER")
+	}
+
 	return &Config{
 		DatabaseURL:        dbURL,
 		JWTSecret:          jwtSecret,
@@ -53,5 +67,10 @@ func Load() (*Config, error) {
 		AWSAccessKeyID:     os.Getenv("AWS_ACCESS_KEY_ID"),
 		AWSSecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
 		S3Bucket:           os.Getenv("S3_BUCKET"),
+		SMTPHost:           os.Getenv("SMTP_HOST"),
+		SMTPPort:           smtpPort,
+		SMTPUser:           os.Getenv("SMTP_USER"),
+		SMTPPass:           os.Getenv("SMTP_PASS"),
+		FromEmail:          fromEmail,
 	}, nil
 }
