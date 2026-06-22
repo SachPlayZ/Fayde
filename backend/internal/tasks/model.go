@@ -11,24 +11,28 @@ type Tag struct {
 
 // Task represents a task record as stored in the database.
 type Task struct {
-	ID             string     `json:"id"`
-	UserID         string     `json:"user_id"`
-	Title          string     `json:"title"`
-	Description    string     `json:"description"`
-	Status         string     `json:"status"`
-	Priority       string     `json:"priority"`
-	DueDate        *time.Time `json:"due_date"`
-	Recurrence     *string    `json:"recurrence"`
-	RecurrenceEnd  *time.Time `json:"recurrence_end"`
-	ParentTaskID   *string    `json:"parent_task_id"`
-	AssigneeID     *string    `json:"assignee_id"`
-	AssigneeEmail  *string    `json:"assignee_email"`
-	SortOrder      float64    `json:"sort_order"`
-	Tags           []Tag      `json:"tags"`
-	SubtaskCount   int        `json:"subtask_count"`
-	SubtasksDone   int        `json:"subtasks_done"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
+	ID               string     `json:"id"`
+	UserID           string     `json:"user_id"`
+	Title            string     `json:"title"`
+	Description      string     `json:"description"`
+	Status           string     `json:"status"`
+	Priority         string     `json:"priority"`
+	DueDate          *time.Time `json:"due_date"`
+	Recurrence       *string    `json:"recurrence"`
+	RecurrenceEnd    *time.Time `json:"recurrence_end"`
+	ParentTaskID     *string    `json:"parent_task_id"`
+	AssigneeID       *string    `json:"assignee_id"`
+	AssigneeEmail    *string    `json:"assignee_email"`
+	SortOrder        float64    `json:"sort_order"`
+	EffortPoints     *int       `json:"effort_points"`
+	ProjectID        *string    `json:"project_id"`
+	ProjectName      *string    `json:"project_name"`
+	TotalTimeSeconds int        `json:"total_time_seconds"`
+	Tags             []Tag      `json:"tags"`
+	SubtaskCount     int        `json:"subtask_count"`
+	SubtasksDone     int        `json:"subtasks_done"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // CreateRequest contains the fields for creating a new task.
@@ -41,6 +45,8 @@ type CreateRequest struct {
 	Recurrence    *string    `json:"recurrence"     validate:"omitempty,oneof=daily weekly monthly"`
 	RecurrenceEnd *time.Time `json:"recurrence_end"`
 	AssigneeID    *string    `json:"assignee_id"`
+	EffortPoints  *int       `json:"effort_points"`
+	ProjectID     *string    `json:"project_id"`
 }
 
 // UpdateRequest contains the fields for a partial task update.
@@ -55,6 +61,19 @@ type UpdateRequest struct {
 	RecurrenceEnd *time.Time `json:"recurrence_end"`
 	AssigneeID    *string    `json:"assignee_id"`
 	SortOrder     *float64   `json:"sort_order"`
+	EffortPoints  *int       `json:"effort_points"`
+	ProjectID     *string    `json:"project_id"`
+}
+
+// ListParams describes filters, sorting, and pagination for listing tasks.
+type ListParams struct {
+	Status    string
+	Search    string
+	Sort      string
+	Order     string
+	Page      int
+	Limit     int
+	ProjectID string
 }
 
 // BulkUpdateRequest updates status/priority for multiple tasks.
@@ -73,16 +92,6 @@ type BulkDeleteRequest struct {
 type ReorderItem struct {
 	ID        string  `json:"id"`
 	SortOrder float64 `json:"sort_order"`
-}
-
-// ListParams describes filters, sorting, and pagination for listing tasks.
-type ListParams struct {
-	Status string
-	Search string
-	Sort   string
-	Order  string
-	Page   int
-	Limit  int
 }
 
 // ListResult is the paginated response envelope for task lists.

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/SachPlayZ/rivz-asn/backend/internal/activitylog"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/groq"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
 	"github.com/go-playground/validator/v10"
 )
@@ -24,6 +25,16 @@ type DependenciesService interface {
 	NotifyUnblocked(ctx context.Context, doneTaskID, ownerUserID string)
 }
 
+// WebhooksService fires outbound webhooks on task events.
+type WebhooksService interface {
+	Fire(ctx context.Context, userID, event string, payload any)
+}
+
+// WatchersService notifies watchers on task update.
+type WatchersService interface {
+	NotifyWatchers(ctx context.Context, taskID, updaterUserID, taskTitle string)
+}
+
 // Service handles business logic for task operations.
 type Service struct {
 	repo          Repository
@@ -31,6 +42,8 @@ type Service struct {
 	sseBroker     *sse.Broker
 	notifSvc      NotificationsService
 	depsSvc       DependenciesService
+	webhooksSvc   WebhooksService
+	watchersSvc   WatchersService
 }
 
 // NewService creates a new tasks Service.
@@ -38,8 +51,7 @@ func NewService(repo Repository, activitySvc *activitylog.Service, sseBroker *ss
 	return &Service{repo: repo, activitySvc: activitySvc, sseBroker: sseBroker}
 }
 
-// SetNotificationsService wires in the notifications dependency post-construction
-// to avoid circular init order.
+// SetNotificationsService wires in the notifications dependency post-construction.
 func (s *Service) SetNotificationsService(notifSvc NotificationsService) {
 	s.notifSvc = notifSvc
 }
@@ -47,6 +59,45 @@ func (s *Service) SetNotificationsService(notifSvc NotificationsService) {
 // SetDependenciesService wires in the dependencies dependency.
 func (s *Service) SetDependenciesService(depsSvc DependenciesService) {
 	s.depsSvc = depsSvc
+}
+
+// SetWebhooksService wires in the webhooks dependency.
+func (s *Service) SetWebhooksService(webhooksSvc WebhooksService) {
+	s.webhooksSvc = webhooksSvc
+}
+
+// SetWatchersService wires in the watchers dependency.
+func (s *Service) SetWatchersService(watchersSvc WatchersService) {
+	s.watchersSvc = watchersSvc
+}
+
+// ListForAI implements groq.TasksFetcher.
+func (s *Service) ListForAI(ctx context.Context, userID string) ([]*groq.TaskSummary, error) {
+	items, err := s.repo.ListForAI(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]*groq.TaskSummary, len(items))
+	for i, item := range items {
+		result[i] = &groq.TaskSummary{
+			ID:       item.ID,
+			Title:    item.Title,
+			Status:   item.Status,
+			DueDate:  item.DueDate,
+			Priority: item.Priority,
+		}
+	}
+	return result, nil
+}
+
+// UpdateTaskStatus is used by the GitHub webhook to mark a task done.
+func (s *Service) UpdateTaskStatus(ctx context.Context, taskID, _ string, status string) error {
+	return s.repo.UpdateStatusByID(ctx, taskID, status)
+}
+
+// ListAllWithDueDate returns all tasks with due dates (for export).
+func (s *Service) ListAllWithDueDate(ctx context.Context, userID string) ([]*Task, error) {
+	return s.repo.ListAllWithDueDate(ctx, userID)
 }
 
 // CreateTask creates a new task for the given user.
@@ -64,6 +115,10 @@ func (s *Service) CreateTask(ctx context.Context, userID string, req CreateReque
 	}
 
 	s.sseBroker.Publish(userID, sse.Event{Type: "task.created", Payload: task})
+
+	if s.webhooksSvc != nil {
+		go s.webhooksSvc.Fire(ctx, userID, "task.created", task)
+	}
 
 	// Notify assignee if assigned to someone else.
 	if task.AssigneeID != nil && *task.AssigneeID != userID && s.notifSvc != nil {
@@ -121,6 +176,17 @@ func (s *Service) UpdateTask(ctx context.Context, id, userID string, req UpdateR
 
 	s.sseBroker.Publish(userID, sse.Event{Type: "task.updated", Payload: task})
 
+	if s.webhooksSvc != nil {
+		event := "task.updated"
+		if req.Status != nil && *req.Status == "done" {
+			event = "task.completed"
+		}
+		go s.webhooksSvc.Fire(ctx, userID, event, task)
+	}
+	if s.watchersSvc != nil {
+		go s.watchersSvc.NotifyWatchers(ctx, task.ID, userID, task.Title)
+	}
+
 	// Assignee notification.
 	if req.AssigneeID != nil && *req.AssigneeID != "" && *req.AssigneeID != userID && s.notifSvc != nil {
 		if old.AssigneeID == nil || *old.AssigneeID != *req.AssigneeID {
@@ -153,6 +219,10 @@ func (s *Service) DeleteTask(ctx context.Context, id, userID string) error {
 	}
 
 	s.sseBroker.Publish(userID, sse.Event{Type: "task.deleted", Payload: map[string]string{"id": id}})
+
+	if s.webhooksSvc != nil {
+		go s.webhooksSvc.Fire(ctx, userID, "task.deleted", map[string]string{"id": id})
+	}
 
 	return nil
 }

@@ -8,19 +8,22 @@ import (
 
 // Config holds all application configuration values.
 type Config struct {
-	DatabaseURL        string
-	JWTSecret          string
-	Port               string
-	CORSOrigin         string
-	AWSRegion          string
-	AWSAccessKeyID     string
-	AWSSecretAccessKey string
-	S3Bucket           string
-	SMTPHost           string
-	SMTPPort           string
-	SMTPUser           string
-	SMTPPass           string
-	FromEmail          string
+	DatabaseURL          string
+	JWTSecret            string
+	Port                 string
+	CORSOrigin           string
+	AWSRegion            string
+	AWSAccessKeyID       string
+	AWSSecretAccessKey   string
+	S3Bucket             string
+	SMTPHost             string
+	SMTPPort             string
+	SMTPUser             string
+	SMTPPass             string
+	FromEmail            string
+	GroqAPIKey           string
+	GitHubWebhookSecret  string
+	FrontendURL          string
 }
 
 // Load reads configuration from environment variables.
@@ -58,19 +61,27 @@ func Load() (*Config, error) {
 		fromEmail = os.Getenv("SMTP_USER")
 	}
 
+	frontendURL := os.Getenv("FRONTEND_URL")
+	if frontendURL == "" {
+		frontendURL = "http://localhost:3000"
+	}
+
 	return &Config{
-		DatabaseURL:        dbURL,
-		JWTSecret:          jwtSecret,
-		Port:               port,
-		CORSOrigin:         corsOrigin,
-		AWSRegion:          os.Getenv("AWS_REGION"),
-		AWSAccessKeyID:     os.Getenv("AWS_ACCESS_KEY_ID"),
-		AWSSecretAccessKey: os.Getenv("AWS_SECRET_ACCESS_KEY"),
-		S3Bucket:           os.Getenv("S3_BUCKET"),
-		SMTPHost:           os.Getenv("SMTP_HOST"),
-		SMTPPort:           smtpPort,
-		SMTPUser:           os.Getenv("SMTP_USER"),
-		SMTPPass:           os.Getenv("SMTP_PASS"),
-		FromEmail:          fromEmail,
+		DatabaseURL:         dbURL,
+		JWTSecret:           jwtSecret,
+		Port:                port,
+		CORSOrigin:          corsOrigin,
+		AWSRegion:           os.Getenv("AWS_REGION"),
+		AWSAccessKeyID:      os.Getenv("AWS_ACCESS_KEY_ID"),
+		AWSSecretAccessKey:  os.Getenv("AWS_SECRET_ACCESS_KEY"),
+		S3Bucket:            os.Getenv("S3_BUCKET"),
+		SMTPHost:            os.Getenv("SMTP_HOST"),
+		SMTPPort:            smtpPort,
+		SMTPUser:            os.Getenv("SMTP_USER"),
+		SMTPPass:            os.Getenv("SMTP_PASS"),
+		FromEmail:           fromEmail,
+		GroqAPIKey:          os.Getenv("GROQ_API_KEY"),
+		GitHubWebhookSecret: os.Getenv("GITHUB_WEBHOOK_SECRET"),
+		FrontendURL:         frontendURL,
 	}, nil
 }

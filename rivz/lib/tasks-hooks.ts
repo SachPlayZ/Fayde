@@ -15,6 +15,10 @@ export type Task = {
   assignee_id: string | null;
   assignee_email: string | null;
   sort_order: number;
+  effort_points: number | null;
+  project_id: string | null;
+  project_name: string | null;
+  total_time_seconds: number;
   tags: Tag[];
   subtask_count: number;
   subtasks_done: number;
@@ -36,6 +40,7 @@ export type ListParams = {
   order?: string;
   page?: number;
   limit?: number;
+  project_id?: string;
 };
 
 function buildQuery(params: ListParams) {
@@ -46,6 +51,7 @@ function buildQuery(params: ListParams) {
   if (params.order) q.set("order", params.order);
   if (params.page) q.set("page", String(params.page));
   if (params.limit) q.set("limit", String(params.limit));
+  if (params.project_id) q.set("project_id", params.project_id);
   return q.toString();
 }
 
@@ -83,6 +89,10 @@ export function useCreateTask() {
         assignee_id: null,
         assignee_email: null,
         sort_order: 0,
+        effort_points: null,
+        project_id: null,
+        project_name: null,
+        total_time_seconds: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         description: newTask.description ?? "",

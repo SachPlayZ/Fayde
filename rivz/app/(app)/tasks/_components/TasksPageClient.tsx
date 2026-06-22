@@ -25,7 +25,10 @@ import { TaskRow } from "./TaskRow";
 import { TaskForm } from "./TaskForm";
 import { Pagination } from "./Pagination";
 import { KanbanView } from "./KanbanView";
+import { GanttView } from "./GanttView";
+import { WeeklyPlanner } from "./WeeklyPlanner";
 import { ViewToggle } from "./ViewToggle";
+import type { View as DisplayViewType } from "./ViewToggle";
 import {
   Plus, Search, ClipboardList, ArrowUp, ArrowDown, X,
   Inbox, Sun, Calendar, AlertCircle, CalendarClock, Focus,
@@ -39,7 +42,7 @@ const PAGE_LIMIT = 10;
 const SMART_LIMIT = 200;
 
 type SmartList = "all" | "inbox" | "today" | "upcoming" | "overdue";
-type DisplayView = "table" | "kanban";
+type DisplayView = DisplayViewType;
 
 const SMART_NAV = [
   { id: "inbox",    label: "Inbox",     icon: <Inbox className="size-4" />,          desc: "No unscheduled tasks." },
@@ -77,7 +80,7 @@ export function TasksPageClient() {
 
   const [focusMode, setFocusMode] = useState(false);
 
-  // Display view (table/kanban) in localStorage
+  // Display view (table/kanban/gantt/weekly) in localStorage
   const [displayView, setDisplayView] = useState<DisplayView>(() => {
     if (typeof window !== "undefined") {
       return (localStorage.getItem("task-view") as DisplayView) ?? "table";
@@ -98,6 +101,7 @@ export function TasksPageClient() {
   const newParam = searchParams.get("new");
   useEffect(() => {
     if (newParam === "1") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNewTaskOpen(true);
       const p = new URLSearchParams(searchParams.toString());
       p.delete("new");
@@ -467,6 +471,17 @@ export function TasksPageClient() {
           </div>
         ) : displayView === "kanban" && list === "all" ? (
           <KanbanView tasks={displayTasks} />
+        ) : displayView === "gantt" && list === "all" ? (
+          <GanttView
+            tasks={displayTasks}
+            onTaskClick={(task) => router.push(`/tasks/${task.id}`)}
+          />
+        ) : displayView === "weekly" && list === "all" ? (
+          <WeeklyPlanner
+            tasks={displayTasks}
+            onTaskClick={(task) => router.push(`/tasks/${task.id}`)}
+            onUpdateDueDate={() => {}}
+          />
         ) : (
           <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500">
             <div className="hidden md:block rounded-xl border border-border overflow-hidden bg-card shadow-sm">

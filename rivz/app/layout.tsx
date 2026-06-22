@@ -14,8 +14,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TaskFlow",
-  description: "Rival.io take-home — Task Management App",
+  title: "Rivz",
+  description: "Task manager",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

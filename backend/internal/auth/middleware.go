@@ -59,6 +59,46 @@ func UserRoleFromContext(ctx context.Context) string {
 	return v
 }
 
+// APITokenValidator is implemented by apitokens.Service.
+type APITokenValidator interface {
+	ValidateToken(ctx context.Context, rawToken string) (userID string, err error)
+}
+
+// AuthenticateAny tries JWT first, then falls back to API token (rivz_* prefix).
+func AuthenticateAny(jwtSecret string, apiTokenSvc APITokenValidator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			header := r.Header.Get("Authorization")
+			if header == "" || !strings.HasPrefix(header, "Bearer ") {
+				httputil.Error(w, http.StatusUnauthorized, "missing or invalid authorization header")
+				return
+			}
+			tokenStr := strings.TrimPrefix(header, "Bearer ")
+
+			// Try JWT first.
+			if userID, role, err := ValidateToken(tokenStr, jwtSecret); err == nil {
+				ctx := context.WithValue(r.Context(), userIDKey, userID)
+				ctx = context.WithValue(ctx, userRoleKey, role)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
+			// Fall back to API token.
+			if strings.HasPrefix(tokenStr, "rivz_") && apiTokenSvc != nil {
+				userID, err := apiTokenSvc.ValidateToken(r.Context(), tokenStr)
+				if err == nil && userID != "" {
+					ctx := context.WithValue(r.Context(), userIDKey, userID)
+					ctx = context.WithValue(ctx, userRoleKey, "user")
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+
+			httputil.Error(w, http.StatusUnauthorized, "invalid or expired token")
+		})
+	}
+}
+
 // RequireAdmin is middleware that returns 403 if the user's role is not "admin".
 // Must be used after Authenticate.
 func RequireAdmin(next http.Handler) http.Handler {

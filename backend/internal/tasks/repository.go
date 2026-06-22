@@ -4,9 +4,19 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// AITaskSummary is used by the Groq AI handler.
+type AITaskSummary struct {
+	ID       string
+	Title    string
+	Status   string
+	DueDate  *time.Time
+	Priority string
+}
 
 // Repository defines persistence operations for tasks.
 type Repository interface {
@@ -19,6 +29,9 @@ type Repository interface {
 	BulkUpdate(ctx context.Context, userID string, req BulkUpdateRequest) error
 	BulkDelete(ctx context.Context, userID string, ids []string) error
 	CloneForRecurrence(ctx context.Context, original *Task) (*Task, error)
+	ListForAI(ctx context.Context, userID string) ([]*AITaskSummary, error)
+	UpdateStatusByID(ctx context.Context, taskID, status string) error
+	ListAllWithDueDate(ctx context.Context, userID string) ([]*Task, error)
 }
 
 // sortColumns is the whitelist of columns allowed in ORDER BY clauses.
@@ -41,7 +54,8 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 
 const taskSelect = `t.id, t.user_id, t.title, t.description, t.status, t.priority,
 	t.due_date, t.recurrence, t.recurrence_end, t.parent_task_id, t.assignee_id,
-	a.email AS assignee_email, t.sort_order, t.created_at, t.updated_at`
+	a.email AS assignee_email, t.sort_order, t.effort_points, t.project_id,
+	p.name AS project_name, t.created_at, t.updated_at`
 
 // scanTask scans a task row (without tags/subtask counts — loaded separately).
 func scanTask(row interface {
@@ -51,13 +65,46 @@ func scanTask(row interface {
 	err := row.Scan(
 		&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.Priority,
 		&t.DueDate, &t.Recurrence, &t.RecurrenceEnd, &t.ParentTaskID, &t.AssigneeID,
-		&t.AssigneeEmail, &t.SortOrder, &t.CreatedAt, &t.UpdatedAt,
+		&t.AssigneeEmail, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
+		&t.ProjectName, &t.CreatedAt, &t.UpdatedAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 	t.Tags = []Tag{}
 	return t, nil
+}
+
+// loadTimeTotals loads total_time_seconds for a slice of tasks.
+func (r *pgRepository) loadTimeTotals(ctx context.Context, tasks []*Task) error {
+	if len(tasks) == 0 {
+		return nil
+	}
+	ids := make([]string, len(tasks))
+	idx := make(map[string]*Task, len(tasks))
+	for i, t := range tasks {
+		ids[i] = t.ID
+		idx[t.ID] = t
+	}
+	rows, err := r.pool.Query(ctx,
+		`SELECT task_id, COALESCE(SUM(duration_seconds),0)
+		 FROM time_entries WHERE task_id=ANY($1) AND ended_at IS NOT NULL
+		 GROUP BY task_id`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var taskID string
+		var total int
+		if err := rows.Scan(&taskID, &total); err != nil {
+			return err
+		}
+		if t, ok := idx[taskID]; ok {
+			t.TotalTimeSeconds = total
+		}
+	}
+	return rows.Err()
 }
 
 // loadExtras loads tags and subtask counts for a slice of tasks.
@@ -136,15 +183,14 @@ func (r *pgRepository) CreateTask(ctx context.Context, userID string, req Create
 		FROM (SELECT * FROM tasks WHERE id=lastval()) t
 		LEFT JOIN users a ON a.id=t.assignee_id`
 
-	// Use a different approach — insert then select
 	var insertQ = `INSERT INTO tasks (user_id, title, description, status, priority, due_date,
-		recurrence, recurrence_end, assignee_id)
-		VALUES ($1,$2,$3,$4::task_status,$5::task_priority,$6,$7,$8,$9)
+		recurrence, recurrence_end, assignee_id, effort_points, project_id)
+		VALUES ($1,$2,$3,$4::task_status,$5::task_priority,$6,$7,$8,$9,$10,$11)
 		RETURNING id`
 	var id string
 	err := r.pool.QueryRow(ctx, insertQ,
 		userID, req.Title, req.Description, status, priority, req.DueDate,
-		req.Recurrence, req.RecurrenceEnd, req.AssigneeID,
+		req.Recurrence, req.RecurrenceEnd, req.AssigneeID, req.EffortPoints, req.ProjectID,
 	).Scan(&id)
 	if err != nil {
 		return nil, fmt.Errorf("tasks: create: %w", err)
@@ -179,6 +225,11 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 		args = append(args, "%"+p.Search+"%")
 		idx++
 	}
+	if p.ProjectID != "" {
+		conds = append(conds, fmt.Sprintf("t.project_id = $%d", idx))
+		args = append(args, p.ProjectID)
+		idx++
+	}
 
 	where := strings.Join(conds, " AND ")
 	col, ok := sortColumns[p.Sort]
@@ -195,6 +246,7 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 		SELECT %s, COUNT(*) OVER() AS total_count
 		FROM tasks t
 		LEFT JOIN users a ON a.id=t.assignee_id
+		LEFT JOIN projects p ON p.id=t.project_id
 		WHERE %s
 		ORDER BY t.%s %s NULLS LAST
 		LIMIT $%d OFFSET $%d`, taskSelect, where, col, order, idx, idx+1)
@@ -214,7 +266,8 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 		err := rows.Scan(
 			&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.Priority,
 			&t.DueDate, &t.Recurrence, &t.RecurrenceEnd, &t.ParentTaskID, &t.AssigneeID,
-			&t.AssigneeEmail, &t.SortOrder, &t.CreatedAt, &t.UpdatedAt,
+			&t.AssigneeEmail, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
+			&t.ProjectName, &t.CreatedAt, &t.UpdatedAt,
 			&total,
 		)
 		if err != nil {
@@ -229,6 +282,9 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 	if err := r.loadExtras(ctx, tasks); err != nil {
 		return nil, 0, err
 	}
+	if err := r.loadTimeTotals(ctx, tasks); err != nil {
+		return nil, 0, err
+	}
 
 	return tasks, total, nil
 }
@@ -236,20 +292,26 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 // GetTask fetches a single task by id, scoped to the owning user.
 func (r *pgRepository) GetTask(ctx context.Context, id, userID string) (*Task, error) {
 	q := fmt.Sprintf(`SELECT %s
-		FROM tasks t LEFT JOIN users a ON a.id=t.assignee_id
+		FROM tasks t
+		LEFT JOIN users a ON a.id=t.assignee_id
+		LEFT JOIN projects p ON p.id=t.project_id
 		WHERE t.id=$1 AND t.user_id=$2`, taskSelect)
 
 	t := &Task{}
 	err := r.pool.QueryRow(ctx, q, id, userID).Scan(
 		&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.Priority,
 		&t.DueDate, &t.Recurrence, &t.RecurrenceEnd, &t.ParentTaskID, &t.AssigneeID,
-		&t.AssigneeEmail, &t.SortOrder, &t.CreatedAt, &t.UpdatedAt,
+		&t.AssigneeEmail, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
+		&t.ProjectName, &t.CreatedAt, &t.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("tasks: get: %w", err)
 	}
 	t.Tags = []Tag{}
 	if err := r.loadExtras(ctx, []*Task{t}); err != nil {
+		return nil, err
+	}
+	if err := r.loadTimeTotals(ctx, []*Task{t}); err != nil {
 		return nil, err
 	}
 	return t, nil
@@ -304,6 +366,16 @@ func (r *pgRepository) UpdateTask(ctx context.Context, id, userID string, req Up
 	if req.SortOrder != nil {
 		sets = append(sets, fmt.Sprintf("sort_order = $%d", argIdx))
 		args = append(args, *req.SortOrder)
+		argIdx++
+	}
+	if req.EffortPoints != nil {
+		sets = append(sets, fmt.Sprintf("effort_points = $%d", argIdx))
+		args = append(args, *req.EffortPoints)
+		argIdx++
+	}
+	if req.ProjectID != nil {
+		sets = append(sets, fmt.Sprintf("project_id = $%d", argIdx))
+		args = append(args, *req.ProjectID)
 		argIdx++
 	}
 
@@ -383,6 +455,65 @@ func (r *pgRepository) BulkDelete(ctx context.Context, userID string, ids []stri
 	}
 	_, err := r.pool.Exec(ctx, `DELETE FROM tasks WHERE id=ANY($1) AND user_id=$2`, ids, userID)
 	return err
+}
+
+// ListForAI returns minimal task data for AI analysis (no tags/extras).
+func (r *pgRepository) ListForAI(ctx context.Context, userID string) ([]*AITaskSummary, error) {
+	rows, err := r.pool.Query(ctx,
+		`SELECT id, title, status, due_date, priority
+		 FROM tasks WHERE user_id=$1 AND status NOT IN ('done','failed')
+		 ORDER BY created_at DESC LIMIT 200`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []*AITaskSummary
+	for rows.Next() {
+		s := &AITaskSummary{}
+		if err := rows.Scan(&s.ID, &s.Title, &s.Status, &s.DueDate, &s.Priority); err != nil {
+			return nil, err
+		}
+		result = append(result, s)
+	}
+	return result, rows.Err()
+}
+
+// UpdateStatusByID updates a task's status without user scoping (used by webhooks).
+func (r *pgRepository) UpdateStatusByID(ctx context.Context, taskID, status string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE tasks SET status=$1::task_status, updated_at=now() WHERE id=$2`,
+		status, taskID)
+	return err
+}
+
+// ListAllWithDueDate returns all tasks with a due date for the user (for CSV/ICS export).
+func (r *pgRepository) ListAllWithDueDate(ctx context.Context, userID string) ([]*Task, error) {
+	q := fmt.Sprintf(`SELECT %s
+		FROM tasks t
+		LEFT JOIN users a ON a.id=t.assignee_id
+		LEFT JOIN projects p ON p.id=t.project_id
+		WHERE t.user_id=$1 AND t.due_date IS NOT NULL
+		ORDER BY t.due_date ASC`, taskSelect)
+	rows, err := r.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tasks []*Task
+	for rows.Next() {
+		t := &Task{}
+		if err := rows.Scan(
+			&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.Priority,
+			&t.DueDate, &t.Recurrence, &t.RecurrenceEnd, &t.ParentTaskID, &t.AssigneeID,
+			&t.AssigneeEmail, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
+			&t.ProjectName, &t.CreatedAt, &t.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		t.Tags = []Tag{}
+		tasks = append(tasks, t)
+	}
+	return tasks, rows.Err()
 }
 
 // CloneForRecurrence creates a new task instance based on a recurring original.

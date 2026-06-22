@@ -274,6 +274,7 @@ export function TaskDetailClient({ id }: { id: string }) {
   // Initialize form from task (only when task id changes)
   useEffect(() => {
     if (task) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle(task.title);
       setDescription(task.description ?? "");
       setStatus(task.status);
@@ -375,7 +376,7 @@ export function TaskDetailClient({ id }: { id: string }) {
     return (
       <div className="flex flex-col items-center justify-center py-24 gap-4 text-center max-w-5xl mx-auto">
         <p className="font-semibold">Task not found</p>
-        <p className="text-sm text-muted-foreground">This task may have been deleted or you don't have access.</p>
+        <p className="text-sm text-muted-foreground">This task may have been deleted or you don&apos;t have access.</p>
         <Button variant="outline" onClick={() => router.push("/tasks")}>
           <ArrowLeft className="size-4" />
           Back to tasks

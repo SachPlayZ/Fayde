@@ -4,7 +4,7 @@ import { ThemeProvider } from "next-themes";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { useSSE } from "@/lib/sse-hook";
 import { Toaster } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 /**
  * SSEConnector always calls useSSE (satisfies Rules of Hooks) but the hook
@@ -25,6 +25,15 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
   );
 }
 
+function SWRegistrar() {
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+  }, []);
+  return null;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
   return (
@@ -33,6 +42,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <AuthProvider>
           <InnerProviders>{children}</InnerProviders>
           <Toaster />
+          <SWRegistrar />
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>

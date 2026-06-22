@@ -12,19 +12,33 @@ import (
 
 	"github.com/SachPlayZ/rivz-asn/backend/internal/activitylog"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/admin"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/apitokens"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/attachments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/comments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/config"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/customfields"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/db"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/dependencies"
+	githubpkg "github.com/SachPlayZ/rivz-asn/backend/internal/github"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/groq"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/notifications"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/pomodoro"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/projects"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/savedfilters"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/scheduler"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/server"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/sharing"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/sprints"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/subtasks"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/tags"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/tasks"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/templates"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/timetracking"
+	totppkg "github.com/SachPlayZ/rivz-asn/backend/internal/totp"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/watchers"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/webhooks"
 )
 
 func main() {
@@ -66,7 +80,7 @@ func run() error {
 	sseBroker := sse.NewBroker()
 	sseHandler := sse.NewHandler(sseBroker, cfg.JWTSecret)
 
-	// Notifications (wired first; injected into tasks, comments, deps).
+	// Notifications.
 	notifRepo := notifications.NewRepository(pool)
 	notifSvc := notifications.NewService(notifRepo, sseBroker)
 	notifHandler := notifications.NewHandler(notifSvc)
@@ -116,6 +130,80 @@ func run() error {
 	depsHandler := dependencies.NewHandler(depsSvc)
 	tasksSvc.SetDependenciesService(depsSvc)
 
+	// Projects.
+	projectsRepo := projects.NewRepository(pool)
+	projectsSvc := projects.NewService(projectsRepo)
+	projectsHandler := projects.NewHandler(projectsSvc)
+
+	// Time tracking.
+	timeRepo := timetracking.NewRepository(pool)
+	timeSvc := timetracking.NewService(timeRepo)
+	timeHandler := timetracking.NewHandler(timeSvc)
+
+	// Sprints.
+	sprintsRepo := sprints.NewRepository(pool)
+	sprintsSvc := sprints.NewService(sprintsRepo)
+	sprintsHandler := sprints.NewHandler(sprintsSvc)
+
+	// Templates.
+	templatesRepo := templates.NewRepository(pool)
+	templatesSvc := templates.NewService(templatesRepo)
+	templatesHandler := templates.NewHandler(templatesSvc)
+
+	// Custom fields.
+	cfRepo := customfields.NewRepository(pool)
+	cfSvc := customfields.NewService(cfRepo)
+	cfHandler := customfields.NewHandler(cfSvc)
+
+	// Watchers.
+	watchersRepo := watchers.NewRepository(pool)
+	watchersSvc := watchers.NewService(watchersRepo, notifSvc)
+	watchersHandler := watchers.NewHandler(watchersSvc)
+	tasksSvc.SetWatchersService(watchersSvc)
+
+	// Saved filters.
+	sfRepo := savedfilters.NewRepository(pool)
+	sfSvc := savedfilters.NewService(sfRepo)
+	sfHandler := savedfilters.NewHandler(sfSvc)
+
+	// API tokens.
+	apiTokensRepo := apitokens.NewRepository(pool)
+	apiTokensSvc := apitokens.NewService(apiTokensRepo)
+	apiTokensHandler := apitokens.NewHandler(apiTokensSvc)
+
+	// TOTP.
+	totpRepo := totppkg.NewRepository(pool)
+	totpSvc := totppkg.NewService(totpRepo)
+	totpHandler := totppkg.NewHandler(totpSvc)
+
+	// Outbound webhooks.
+	webhooksRepo := webhooks.NewRepository(pool)
+	webhooksSvc := webhooks.NewService(webhooksRepo)
+	webhooksHandler := webhooks.NewHandler(webhooksSvc)
+	tasksSvc.SetWebhooksService(webhooksSvc)
+
+	// GitHub integration.
+	githubRepo := githubpkg.NewRepository(pool)
+	githubSvc := githubpkg.NewService(githubRepo, tasksSvc, cfg.GitHubWebhookSecret)
+	githubHandler := githubpkg.NewHandler(githubSvc)
+
+	// Task sharing.
+	sharingRepo := sharing.NewRepository(pool)
+	sharingSvc := sharing.NewService(sharingRepo)
+	sharingHandler := sharing.NewHandler(sharingSvc, pool)
+
+	// Pomodoro.
+	pomodoroRepo := pomodoro.NewRepository(pool)
+	pomodoroSvc := pomodoro.NewService(pomodoroRepo)
+	pomodoroHandler := pomodoro.NewHandler(pomodoroSvc)
+
+	// Groq AI.
+	var groqHandler *groq.Handler
+	if cfg.GroqAPIKey != "" {
+		groqClient := groq.NewClient(cfg.GroqAPIKey)
+		groqHandler = groq.NewHandler(groqClient, tasksSvc)
+	}
+
 	// Scheduler.
 	schedulerCtx, schedulerCancel := context.WithCancel(context.Background())
 	defer schedulerCancel()
@@ -124,8 +212,14 @@ func run() error {
 	handler := server.New(server.ServerConfig{
 		JWTSecret:  cfg.JWTSecret,
 		CORSOrigin: cfg.CORSOrigin,
-	}, authHandler, tasksHandler, adminHandler, sseHandler, attachmentsHandler,
-		subtasksHandler, tagsHandler, commentsHandler, depsHandler, notifHandler)
+	},
+		authHandler, tasksHandler, adminHandler, sseHandler, attachmentsHandler,
+		subtasksHandler, tagsHandler, commentsHandler, depsHandler, notifHandler,
+		projectsHandler, timeHandler, sprintsHandler, templatesHandler,
+		cfHandler, watchersHandler, sfHandler, apiTokensHandler, totpHandler,
+		webhooksHandler, githubHandler, sharingHandler, pomodoroHandler,
+		groqHandler, apiTokensSvc,
+	)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

@@ -29,6 +29,7 @@ export function QuickCaptureDialog() {
   // Focus title on open
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle("");
       setNlInput("");
       setParsedDate(null);

@@ -8,7 +8,8 @@ import { NotificationsBell } from "@/components/NotificationsBell";
 import { CommandPaletteProvider } from "@/components/CommandPalette";
 import { QuickCaptureProvider } from "@/lib/quick-capture-context";
 import { QuickCaptureDialog } from "@/components/QuickCaptureDialog";
-import { LogOut, Activity, ShieldCheck } from "lucide-react";
+import { PomodoroTimer } from "@/components/PomodoroTimer";
+import { LogOut, Activity, ShieldCheck, ClipboardList, FolderKanban, Zap, Settings } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -45,6 +46,38 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           <span className="font-semibold text-sm tracking-tight">TaskFlow</span>
 
           <div className="flex items-center gap-1.5">
+            {/* Nav links */}
+            <nav className="hidden sm:flex items-center gap-0.5 mr-2">
+              <Link
+                href="/tasks"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
+              >
+                <ClipboardList className="w-3.5 h-3.5" />
+                Tasks
+              </Link>
+              <Link
+                href="/projects"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
+              >
+                <FolderKanban className="w-3.5 h-3.5" />
+                Projects
+              </Link>
+              <Link
+                href="/sprints"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Sprints
+              </Link>
+              <Link
+                href="/settings"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Settings
+              </Link>
+            </nav>
+
             <span className="text-xs text-muted-foreground hidden sm:block mr-1">
               {user.email}
             </span>
@@ -84,6 +117,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <ActivitySidebar open={activityOpen} onClose={() => setActivityOpen(false)} />
       <QuickCaptureDialog />
+      <PomodoroTimer />
     </div>
     </CommandPaletteProvider>
     </QuickCaptureProvider>

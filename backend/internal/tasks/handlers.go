@@ -1,11 +1,14 @@
 package tasks
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/SachPlayZ/rivz-asn/backend/internal/activitylog"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
@@ -71,12 +74,13 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(q.Get("limit"))
 
 	p := ListParams{
-		Status: q.Get("status"),
-		Search: q.Get("search"),
-		Sort:   q.Get("sort"),
-		Order:  q.Get("order"),
-		Page:   page,
-		Limit:  limit,
+		Status:    q.Get("status"),
+		Search:    q.Get("search"),
+		Sort:      q.Get("sort"),
+		Order:     q.Get("order"),
+		Page:      page,
+		Limit:     limit,
+		ProjectID: q.Get("project_id"),
 	}
 
 	result, err := h.svc.ListTasks(r.Context(), userID, p)
@@ -274,6 +278,106 @@ func (h *Handler) GetUserActivity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.JSON(w, http.StatusOK, logs)
+}
+
+// ExportCSV handles GET /tasks/export.csv.
+func (h *Handler) ExportCSV(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	q := r.URL.Query()
+	page, _ := strconv.Atoi(q.Get("page"))
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit == 0 {
+		limit = 100
+	}
+	p := ListParams{
+		Status: q.Get("status"),
+		Search: q.Get("search"),
+		Page:   page,
+		Limit:  limit,
+	}
+
+	result, err := h.svc.ListTasks(r.Context(), userID, p)
+	if err != nil {
+		httputil.Error(w, http.StatusInternalServerError, "failed to list tasks")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"tasks.csv\"")
+
+	cw := csv.NewWriter(w)
+	_ = cw.Write([]string{"ID", "Title", "Status", "Priority", "Due Date", "Project", "Tags", "Effort Points", "Total Time (s)", "Created At"})
+	for _, t := range result.Data {
+		due := ""
+		if t.DueDate != nil {
+			due = t.DueDate.Format("2006-01-02")
+		}
+		project := ""
+		if t.ProjectName != nil {
+			project = *t.ProjectName
+		}
+		var tagNames []string
+		for _, tg := range t.Tags {
+			tagNames = append(tagNames, tg.Name)
+		}
+		effort := ""
+		if t.EffortPoints != nil {
+			effort = strconv.Itoa(*t.EffortPoints)
+		}
+		_ = cw.Write([]string{
+			t.ID, t.Title, t.Status, t.Priority, due, project,
+			strings.Join(tagNames, ";"), effort,
+			strconv.Itoa(t.TotalTimeSeconds),
+			t.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	cw.Flush()
+}
+
+// ExportICS handles GET /tasks/calendar.ics.
+func (h *Handler) ExportICS(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	tasks, err := h.svc.ListAllWithDueDate(r.Context(), userID)
+	if err != nil {
+		httputil.Error(w, http.StatusInternalServerError, "failed to list tasks")
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/calendar")
+	w.Header().Set("Content-Disposition", "attachment; filename=\"tasks.ics\"")
+
+	fmt.Fprintf(w, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Rivz//Tasks//EN\r\nCALSCALE:GREGORIAN\r\n")
+	for _, t := range tasks {
+		if t.DueDate == nil {
+			continue
+		}
+		uid := t.ID + "@rivz"
+		dtStamp := time.Now().UTC().Format("20060102T150405Z")
+		dtStart := t.DueDate.UTC().Format("20060102")
+		fmt.Fprintf(w, "BEGIN:VEVENT\r\nUID:%s\r\nDTSTAMP:%s\r\nDTSTART;VALUE=DATE:%s\r\nSUMMARY:%s\r\nDESCRIPTION:%s\r\nSTATUS:%s\r\nEND:VEVENT\r\n",
+			uid, dtStamp, dtStart,
+			escapeICS(t.Title), escapeICS(t.Description), strings.ToUpper(t.Status),
+		)
+	}
+	fmt.Fprintf(w, "END:VCALENDAR\r\n")
+}
+
+func escapeICS(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, ";", "\\;")
+	s = strings.ReplaceAll(s, ",", "\\,")
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	return s
 }
 
 // validationFields converts validator.ValidationErrors into a field→tag map.

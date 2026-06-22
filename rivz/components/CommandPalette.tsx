@@ -6,7 +6,7 @@ import { useTasks } from "@/lib/tasks-hooks";
 import { useTheme } from "next-themes";
 import { useQuickCapture } from "@/lib/quick-capture-context";
 import {
-  Search, Plus, Settings, ClipboardList, Inbox,
+  Search, Settings, ClipboardList, Inbox,
   Sun, Calendar, AlertCircle, CalendarClock, Zap,
 } from "lucide-react";
 
