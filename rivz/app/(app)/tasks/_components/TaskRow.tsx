@@ -1,60 +1,32 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { format, addDays, addWeeks, startOfDay } from "date-fns";
 import { type Task, useUpdateTask, useDeleteTask } from "@/lib/tasks-hooks";
 import { Button } from "@/components/ui/button";
 import { TableRow, TableCell } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { Pencil, Trash2 } from "lucide-react";
+import { Trash2, CalendarClock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { TaskForm } from "./TaskForm";
 
 const statusConfig = {
-  todo: {
-    label: "Todo",
-    className: "bg-muted text-muted-foreground",
-  },
-  in_progress: {
-    label: "In Progress",
-    className: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  },
-  done: {
-    label: "Done",
-    className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-  },
-  failed: {
-    label: "Failed",
-    className: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
-  },
+  todo: { label: "Todo", className: "bg-muted text-muted-foreground" },
+  in_progress: { label: "In Progress", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
+  done: { label: "Done", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
+  failed: { label: "Failed", className: "bg-rose-500/10 text-rose-600 dark:text-rose-400" },
 };
 
 const priorityConfig = {
-  low: {
-    label: "Low",
-    dot: "bg-emerald-500",
-    text: "text-emerald-600 dark:text-emerald-400",
-    bg: "bg-emerald-500/8",
-  },
-  medium: {
-    label: "Medium",
-    dot: "bg-amber-500",
-    text: "text-amber-600 dark:text-amber-400",
-    bg: "bg-amber-500/8",
-  },
-  high: {
-    label: "High",
-    dot: "bg-rose-500",
-    text: "text-rose-600 dark:text-rose-400",
-    bg: "bg-rose-500/8",
-  },
+  low:    { label: "Low",    dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/8" },
+  medium: { label: "Medium", dot: "bg-amber-500",   text: "text-amber-600 dark:text-amber-400",   bg: "bg-amber-500/8" },
+  high:   { label: "High",   dot: "bg-rose-500",    text: "text-rose-600 dark:text-rose-400",    bg: "bg-rose-500/8" },
 };
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return null;
-  return new Date(dateStr).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -91,13 +63,41 @@ type TaskRowProps = {
   onSelectChange?: (id: string, checked: boolean) => void;
 };
 
+const RESCHEDULE_CHIPS = [
+  { label: "Today",     date: () => startOfDay(new Date()) },
+  { label: "Tomorrow",  date: () => addDays(startOfDay(new Date()), 1) },
+  { label: "Next week", date: () => addWeeks(startOfDay(new Date()), 1) },
+];
+
+const RECURRENCE_LABEL: Record<string, string> = {
+  daily: "Daily", weekly: "Weekly", monthly: "Monthly",
+};
+
 export function TaskRow({ task, index = 0, search = "", selected = false, onSelectChange }: TaskRowProps) {
-  const [editOpen, setEditOpen] = useState(false);
+  const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const updateTask = useUpdateTask();
   const deleteTask = useDeleteTask();
 
-  const handleToggleDone = async () => {
+  const handleReschedule = async (date: Date | undefined, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setRescheduleOpen(false);
+    setCalendarOpen(false);
+    try {
+      await updateTask.mutateAsync({
+        id: task.id,
+        due_date: date ? `${format(date, "yyyy-MM-dd")}T00:00:00Z` : null,
+      });
+      toast.success(date ? `Rescheduled to ${format(date, "MMM d")}` : "Due date cleared");
+    } catch {
+      toast.error("Failed to reschedule");
+    }
+  };
+
+  const handleToggleDone = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     const newStatus = task.status === "done" ? "todo" : "done";
     try {
       await updateTask.mutateAsync({ id: task.id, status: newStatus });
@@ -106,7 +106,8 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
     }
   };
 
-  const handleDelete = async () => {
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       await deleteTask.mutateAsync(task.id);
       toast.success("Task deleted");
@@ -115,6 +116,8 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
       toast.error("Failed to delete task");
     }
   };
+
+  const navigate = () => router.push(`/tasks/${task.id}`);
 
   const status = statusConfig[task.status];
   const priority = priorityConfig[task.priority];
@@ -125,15 +128,16 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
     <>
       {/* Desktop row */}
       <TableRow
-        className="hidden md:table-row group transition-colors animate-in fade-in-0 slide-in-from-bottom-1 duration-300"
+        className="hidden md:table-row group transition-colors animate-in fade-in-0 slide-in-from-bottom-1 duration-300 cursor-pointer"
         style={{ animationDelay: `${index * 40}ms` }}
+        onClick={navigate}
       >
-        <TableCell className="w-8">
+        <TableCell className="w-8" onClick={(e) => e.stopPropagation()}>
           {onSelectChange ? (
             <input
               type="checkbox"
               checked={selected}
-              onChange={(e) => onSelectChange(task.id, e.target.checked)}
+              onChange={(e) => { e.stopPropagation(); onSelectChange(task.id, e.target.checked); }}
               className="size-4 rounded border-input accent-primary cursor-pointer"
               aria-label={`Select "${task.title}"`}
             />
@@ -149,40 +153,32 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
         </TableCell>
 
         <TableCell>
-          <span
-            className={cn(
-              "font-medium text-sm",
-              isDone && "line-through text-muted-foreground"
-            )}
-          >
+          <span className={cn("font-medium text-sm", isDone && "line-through text-muted-foreground")}>
             <Highlight text={task.title} query={search} />
           </span>
-          {task.description && (
-            <p className="text-xs text-muted-foreground truncate max-w-xs mt-0.5">
-              <Highlight text={task.description} query={search} />
-            </p>
-          )}
+          <div className="flex items-center gap-2 mt-0.5">
+            {task.description && (
+              <p className="text-xs text-muted-foreground truncate max-w-xs">
+                <Highlight text={task.description} query={search} />
+              </p>
+            )}
+            {task.recurrence && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+                <RefreshCw className="size-2.5" />
+                {RECURRENCE_LABEL[task.recurrence] ?? task.recurrence}
+              </span>
+            )}
+          </div>
         </TableCell>
 
         <TableCell className="w-28">
-          <span
-            className={cn(
-              "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-              status.className
-            )}
-          >
+          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium", status.className)}>
             {status.label}
           </span>
         </TableCell>
 
         <TableCell className="w-24">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-              priority.text,
-              priority.bg
-            )}
-          >
+          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium", priority.text, priority.bg)}>
             <span className={cn("size-1.5 rounded-full flex-shrink-0", priority.dot)} />
             {priority.label}
           </span>
@@ -190,57 +186,86 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
 
         <TableCell className="w-36">
           {task.due_date ? (
-            <span
-              className={cn(
-                "text-xs",
-                overdue && !isDone
-                  ? "text-rose-600 dark:text-rose-400 font-medium"
-                  : "text-muted-foreground"
-              )}
-            >
+            <span className={cn("text-xs", overdue && !isDone ? "text-rose-600 dark:text-rose-400 font-medium" : "text-muted-foreground")}>
               <Highlight text={formatDate(task.due_date)!} query={search} />
-              {overdue && !isDone && (
-                <span className="ml-1 opacity-70">· overdue</span>
-              )}
+              {overdue && !isDone && <span className="ml-1 opacity-70">· overdue</span>}
             </span>
           ) : (
             <span className="text-muted-foreground text-xs">—</span>
           )}
         </TableCell>
 
-        <TableCell className="w-28 text-right">
+        <TableCell className="w-36 text-right" onClick={(e) => e.stopPropagation()}>
           <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setEditOpen(true)}
-              aria-label="Edit task"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </Button>
-            {confirmDelete ? (
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={handleDelete}
-                  disabled={deleteTask.isPending}
-                >
-                  Delete
-                </Button>
+            {/* Reschedule popover */}
+            <Popover open={rescheduleOpen} onOpenChange={setRescheduleOpen}>
+              <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="sm"
-                  onClick={() => setConfirmDelete(false)}
+                  size="icon-sm"
+                  onClick={(e) => { e.stopPropagation(); setRescheduleOpen(true); }}
+                  aria-label="Reschedule task"
                 >
-                  Cancel
+                  <CalendarClock className="w-3.5 h-3.5 text-muted-foreground" />
                 </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-2" align="end" onClick={(e) => e.stopPropagation()}>
+                <p className="text-xs font-medium text-muted-foreground mb-2 px-1">Reschedule</p>
+                <div className="flex flex-col gap-0.5">
+                  {RESCHEDULE_CHIPS.map((chip) => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={(e) => handleReschedule(chip.date(), e)}
+                      className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left w-full"
+                    >
+                      <CalendarClock className="size-3.5 text-muted-foreground shrink-0" />
+                      {chip.label}
+                    </button>
+                  ))}
+                  <div className="border-t border-border mt-1 pt-1">
+                    <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setCalendarOpen(true); }}
+                          className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left w-full text-muted-foreground"
+                        >
+                          Pick a date…
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="end" onClick={(e) => e.stopPropagation()}>
+                        <Calendar
+                          mode="single"
+                          selected={task.due_date ? new Date(task.due_date) : undefined}
+                          onSelect={(d) => { handleReschedule(d, { stopPropagation: () => {} } as React.MouseEvent); setRescheduleOpen(false); }}
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    {task.due_date && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleReschedule(undefined, e)}
+                        className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-muted transition-colors text-left w-full text-rose-500"
+                      >
+                        Clear date
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {confirmDelete ? (
+              <div className="flex items-center gap-1">
+                <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleteTask.isPending}>Delete</Button>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}>Cancel</Button>
               </div>
             ) : (
               <Button
                 variant="ghost"
                 size="icon-sm"
-                onClick={() => setConfirmDelete(true)}
+                onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
                 aria-label="Delete task"
               >
                 <Trash2 className="w-3.5 h-3.5 text-rose-500" />
@@ -252,24 +277,24 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
 
       {/* Mobile card */}
       <div
-        className="md:hidden bg-card border border-border rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow duration-200 animate-in fade-in-0 slide-in-from-bottom-2 duration-300"
+        className="md:hidden bg-card border border-border rounded-xl p-4 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow duration-200 animate-in fade-in-0 slide-in-from-bottom-2 duration-300 cursor-pointer active:scale-[0.99]"
         style={{ animationDelay: `${index * 40}ms` }}
+        onClick={navigate}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === "Enter" && navigate()}
       >
         <div className="flex items-start gap-3">
           <input
             type="checkbox"
             checked={isDone}
             onChange={handleToggleDone}
+            onClick={(e) => e.stopPropagation()}
             className="mt-0.5 size-4 rounded border-input accent-primary cursor-pointer flex-shrink-0"
             aria-label={`Mark "${task.title}" as ${isDone ? "not done" : "done"}`}
           />
           <div className="flex-1 min-w-0">
-            <p
-              className={cn(
-                "font-medium text-sm",
-                isDone && "line-through text-muted-foreground"
-              )}
-            >
+            <p className={cn("font-medium text-sm", isDone && "line-through text-muted-foreground")}>
               <Highlight text={task.title} query={search} />
             </p>
             {task.description && (
@@ -278,19 +303,11 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
               </p>
             )}
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => setEditOpen(true)}
-              aria-label="Edit task"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setConfirmDelete(true)}
+              onClick={(e) => { e.stopPropagation(); setConfirmDelete(true); }}
               aria-label="Delete task"
             >
               <Trash2 className="w-3.5 h-3.5 text-rose-500" />
@@ -299,62 +316,35 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <span
-            className={cn(
-              "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium",
-              status.className
-            )}
-          >
+          <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium", status.className)}>
             {status.label}
           </span>
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-              priority.text,
-              priority.bg
-            )}
-          >
+          <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium", priority.text, priority.bg)}>
             <span className={cn("size-1.5 rounded-full flex-shrink-0", priority.dot)} />
             {priority.label}
           </span>
           {task.due_date && (
-            <span
-              className={cn(
-                "text-xs",
-                overdue && !isDone
-                  ? "text-rose-600 dark:text-rose-400 font-medium"
-                  : "text-muted-foreground"
-              )}
-            >
+            <span className={cn("text-xs", overdue && !isDone ? "text-rose-600 dark:text-rose-400 font-medium" : "text-muted-foreground")}>
               Due <Highlight text={formatDate(task.due_date)!} query={search} />
               {overdue && !isDone && " · overdue"}
+            </span>
+          )}
+          {task.recurrence && (
+            <span className="inline-flex items-center gap-0.5 text-xs text-muted-foreground">
+              <RefreshCw className="size-3" />
+              {RECURRENCE_LABEL[task.recurrence] ?? task.recurrence}
             </span>
           )}
         </div>
 
         {confirmDelete && (
-          <div className="flex items-center gap-2 pt-1 border-t border-border">
+          <div className="flex items-center gap-2 pt-1 border-t border-border" onClick={(e) => e.stopPropagation()}>
             <p className="text-xs text-muted-foreground flex-1">Delete this task?</p>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleDelete}
-              disabled={deleteTask.isPending}
-            >
-              Delete
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setConfirmDelete(false)}
-            >
-              Cancel
-            </Button>
+            <Button variant="destructive" size="sm" onClick={handleDelete} disabled={deleteTask.isPending}>Delete</Button>
+            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setConfirmDelete(false); }}>Cancel</Button>
           </div>
         )}
       </div>
-
-      <TaskForm open={editOpen} onOpenChange={setEditOpen} task={task} />
     </>
   );
 }

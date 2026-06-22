@@ -56,6 +56,14 @@ export function useTasks(params: ListParams) {
   });
 }
 
+export function useTask(id: string) {
+  return useQuery<Task>({
+    queryKey: ["tasks", id],
+    queryFn: () => api.get<Task>(`/tasks/${id}`),
+    enabled: !!id,
+  });
+}
+
 export function useCreateTask() {
   const qc = useQueryClient();
   return useMutation({
@@ -103,6 +111,7 @@ export function useUpdateTask() {
     onMutate: async (updated) => {
       await qc.cancelQueries({ queryKey: ["tasks"] });
       const prev = qc.getQueriesData<TasksResponse>({ queryKey: ["tasks"] });
+      const prevSingle = qc.getQueryData<Task>(["tasks", updated.id]);
       qc.setQueriesData<TasksResponse>({ queryKey: ["tasks"] }, (old) => {
         if (!old) return old;
         return {
@@ -112,10 +121,14 @@ export function useUpdateTask() {
           ),
         };
       });
-      return { prev };
+      if (prevSingle) {
+        qc.setQueryData<Task>(["tasks", updated.id], { ...prevSingle, ...updated });
+      }
+      return { prev, prevSingle };
     },
-    onError: (_err, _vars, ctx) => {
+    onError: (_err, vars, ctx) => {
       ctx?.prev?.forEach(([key, data]) => qc.setQueryData(key, data));
+      if (ctx?.prevSingle) qc.setQueryData(["tasks", vars.id], ctx.prevSingle);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });

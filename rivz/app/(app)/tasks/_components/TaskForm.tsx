@@ -2,7 +2,8 @@
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { format, parseISO, formatDistanceToNow } from "date-fns";
+import { format, parseISO, formatDistanceToNow, addDays, addWeeks, startOfDay } from "date-fns";
+import { parseNLDate, formatNLHint } from "@/lib/nldate";
 import { taskSchema, type TaskInput } from "@/lib/schemas";
 import { useCreateTask, useUpdateTask, type Task } from "@/lib/tasks-hooks";
 import { useTaskActivity } from "@/lib/activity-hooks";
@@ -215,6 +216,14 @@ export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(initialDate);
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [recEndCalendarOpen, setRecEndCalendarOpen] = useState(false);
+  const [nlDateInput, setNlDateInput] = useState("");
+  const [nlParsed, setNlParsed] = useState<Date | null>(null);
+
+  const DATE_CHIPS = [
+    { label: "Today",     date: () => startOfDay(new Date()) },
+    { label: "Tomorrow",  date: () => addDays(startOfDay(new Date()), 1) },
+    { label: "Next week", date: () => addWeeks(startOfDay(new Date()), 1) },
+  ] as const;
 
   // Collapsible sections
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
@@ -308,6 +317,8 @@ export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
   const handleDateSelect = (date: Date | undefined) => {
     setSelectedDate(date);
     setValue("due_date", date ? format(date, "yyyy-MM-dd") : null);
+    setNlDateInput("");
+    setNlParsed(null);
     setCalendarOpen(false);
   };
 
@@ -487,6 +498,24 @@ export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
           {/* Due Date */}
           <div className="flex flex-col gap-1.5">
             <Label>Due Date</Label>
+            {/* Quick chips */}
+            <div className="flex gap-1.5">
+              {DATE_CHIPS.map((chip) => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={() => handleDateSelect(chip.date())}
+                  className={cn(
+                    "px-2.5 py-1 rounded-full text-xs font-medium border transition-colors",
+                    selectedDate && format(selectedDate, "yyyy-MM-dd") === format(chip.date(), "yyyy-MM-dd")
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-border hover:border-primary/50 hover:bg-muted"
+                  )}
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
             <div className="flex gap-2">
               <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
                 <PopoverTrigger asChild>
@@ -501,6 +530,32 @@ export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
               </Popover>
               {selectedDate && (
                 <Button type="button" variant="ghost" size="icon-sm" onClick={() => handleDateSelect(undefined)}><X className="h-4 w-4" /></Button>
+              )}
+            </div>
+            {/* NL date input */}
+            <div className="relative">
+              <Input
+                value={nlDateInput}
+                onChange={(e) => {
+                  setNlDateInput(e.target.value);
+                  setNlParsed(parseNLDate(e.target.value));
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && nlParsed) {
+                    e.preventDefault();
+                    handleDateSelect(nlParsed);
+                  }
+                }}
+                onBlur={() => {
+                  if (nlParsed) handleDateSelect(nlParsed);
+                }}
+                placeholder="or: tomorrow, next friday, in 3 days…"
+                className="h-8 text-xs pr-16"
+              />
+              {nlParsed && nlDateInput && (
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-emerald-600 dark:text-emerald-400 font-medium pointer-events-none">
+                  {formatNLHint(nlParsed)}
+                </span>
               )}
             </div>
           </div>

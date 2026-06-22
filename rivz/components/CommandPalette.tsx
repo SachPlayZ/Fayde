@@ -4,12 +4,15 @@ import { Command } from "cmdk";
 import { useRouter } from "next/navigation";
 import { useTasks } from "@/lib/tasks-hooks";
 import { useTheme } from "next-themes";
-import { Search, Plus, Settings, LayoutDashboard, ClipboardList } from "lucide-react";
+import { useQuickCapture } from "@/lib/quick-capture-context";
+import {
+  Search, Plus, Settings, ClipboardList, Inbox,
+  Sun, Calendar, AlertCircle, CalendarClock, Zap,
+} from "lucide-react";
 
 type PaletteContextType = {
   open: boolean;
   setOpen: (v: boolean) => void;
-  openWithTask?: (cb: (taskId: string) => void) => void;
 };
 
 const PaletteContext = createContext<PaletteContextType>({ open: false, setOpen: () => {} });
@@ -43,6 +46,7 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
 function CommandPaletteDialog({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
   const router = useRouter();
   const { setTheme, theme } = useTheme();
+  const { openCapture } = useQuickCapture();
   const { data } = useTasks({ limit: 100 });
   const tasks = data?.data ?? [];
 
@@ -78,32 +82,58 @@ function CommandPaletteDialog({ open, setOpen }: { open: boolean; setOpen: (v: b
 
             <Command.Group heading="Actions">
               <Command.Item
-                onSelect={() => run(() => router.push("/tasks?new=1"))}
+                onSelect={() => run(() => openCapture())}
                 className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
               >
-                <Plus className="size-4" /> New task
-              </Command.Item>
-              <Command.Item
-                onSelect={() => run(() => router.push("/admin"))}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
-              >
-                <Settings className="size-4" /> Go to Admin
+                <Zap className="size-4 text-amber-500" /> Quick capture
+                <span className="ml-auto text-xs text-muted-foreground">N</span>
               </Command.Item>
               <Command.Item
                 onSelect={() => run(() => setTheme(theme === "dark" ? "light" : "dark"))}
                 className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
               >
-                <LayoutDashboard className="size-4" /> Toggle theme
+                <Sun className="size-4" /> Toggle theme
               </Command.Item>
             </Command.Group>
 
-            <Command.Group heading="Navigation">
+            <Command.Group heading="Views">
+              <Command.Item
+                onSelect={() => run(() => router.push("/tasks?list=inbox"))}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
+              >
+                <Inbox className="size-4 text-muted-foreground" /> Inbox
+              </Command.Item>
+              <Command.Item
+                onSelect={() => run(() => router.push("/tasks?list=today"))}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
+              >
+                <Sun className="size-4 text-amber-500" /> Today
+              </Command.Item>
+              <Command.Item
+                onSelect={() => run(() => router.push("/tasks?list=upcoming"))}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
+              >
+                <Calendar className="size-4 text-blue-500" /> Upcoming
+              </Command.Item>
+              <Command.Item
+                onSelect={() => run(() => router.push("/tasks?list=overdue"))}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
+              >
+                <AlertCircle className="size-4 text-rose-500" /> Overdue
+              </Command.Item>
+              <Command.Item
+                onSelect={() => run(() => router.push("/tasks/review"))}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
+              >
+                <CalendarClock className="size-4 text-violet-500" /> Daily review
+              </Command.Item>
               <Command.Item
                 onSelect={() => run(() => router.push("/tasks"))}
                 className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
               >
-                <ClipboardList className="size-4" /> Tasks
+                <ClipboardList className="size-4" /> All tasks
               </Command.Item>
+              {/* Admin is conditionally shown via the existing pattern */}
               <Command.Item
                 onSelect={() => run(() => router.push("/admin"))}
                 className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
@@ -117,7 +147,7 @@ function CommandPaletteDialog({ open, setOpen }: { open: boolean; setOpen: (v: b
                 {tasks.map((t) => (
                   <Command.Item
                     key={t.id}
-                    onSelect={() => run(() => router.push(`/tasks?edit=${t.id}`))}
+                    onSelect={() => run(() => router.push(`/tasks/${t.id}`))}
                     className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer rounded-md hover:bg-muted aria-selected:bg-muted mx-1"
                   >
                     <ClipboardList className="size-4 text-muted-foreground shrink-0" />

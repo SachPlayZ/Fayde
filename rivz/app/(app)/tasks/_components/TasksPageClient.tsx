@@ -1,7 +1,8 @@
 "use client";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useTasks, useBulkUpdateTasks, useBulkDeleteTasks, type Task } from "@/lib/tasks-hooks";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { startOfDay, addDays, isSameDay, isBefore, isAfter, parseISO } from "date-fns";
+import { useTasks, useBulkUpdateTasks, useBulkDeleteTasks } from "@/lib/tasks-hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,13 +26,30 @@ import { TaskForm } from "./TaskForm";
 import { Pagination } from "./Pagination";
 import { KanbanView } from "./KanbanView";
 import { ViewToggle } from "./ViewToggle";
-import { Plus, Search, ClipboardList, ArrowUp, ArrowDown, X } from "lucide-react";
+import {
+  Plus, Search, ClipboardList, ArrowUp, ArrowDown, X,
+  Inbox, Sun, Calendar, AlertCircle, CalendarClock, Focus,
+  CheckCircle2, ChevronRight,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import Link from "next/link";
 
 const PAGE_LIMIT = 10;
+const SMART_LIMIT = 200;
 
-const statusFilters = [
+type SmartList = "all" | "inbox" | "today" | "upcoming" | "overdue";
+type DisplayView = "table" | "kanban";
+
+const SMART_NAV = [
+  { id: "inbox",    label: "Inbox",     icon: <Inbox className="size-4" />,          desc: "No unscheduled tasks." },
+  { id: "today",    label: "Today",     icon: <Sun className="size-4 text-amber-500" />,    desc: "Nothing due today — you're all caught up!" },
+  { id: "upcoming", label: "Upcoming",  icon: <Calendar className="size-4 text-blue-500" />, desc: "Nothing coming up in the next 7 days." },
+  { id: "overdue",  label: "Overdue",   icon: <AlertCircle className="size-4 text-rose-500" />, desc: "No overdue tasks — great work!" },
+  { id: "all",      label: "All Tasks", icon: <ClipboardList className="size-4" />,   desc: "No tasks found." },
+] as const;
+
+const STATUS_FILTERS = [
   { value: "all", label: "All" },
   { value: "todo", label: "Todo" },
   { value: "in_progress", label: "In Progress" },
@@ -39,35 +57,34 @@ const statusFilters = [
   { value: "failed", label: "Failed" },
 ];
 
-type View = "table" | "kanban";
-
 export function TasksPageClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const [newTaskOpen, setNewTaskOpen] = useState(false);
-  const [editTask, setEditTask] = useState<Task | null>(null);
 
   const status = searchParams.get("status") ?? "";
   const search = searchParams.get("search") ?? "";
   const sort = searchParams.get("sort") ?? "created_at";
   const order = searchParams.get("order") ?? "desc";
   const page = Number(searchParams.get("page") ?? "1");
+  const list = (searchParams.get("list") ?? "all") as SmartList;
 
   const [searchInput, setSearchInput] = useState(search);
   const [prevSearch, setPrevSearch] = useState(search);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // View preference
-  const [view, setView] = useState<View>(() => {
+  const [focusMode, setFocusMode] = useState(false);
+
+  // Display view (table/kanban) in localStorage
+  const [displayView, setDisplayView] = useState<DisplayView>(() => {
     if (typeof window !== "undefined") {
-      return (localStorage.getItem("task-view") as View) ?? "table";
+      return (localStorage.getItem("task-view") as DisplayView) ?? "table";
     }
     return "table";
   });
 
-  // Bulk selection
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const bulkUpdate = useBulkUpdateTasks();
   const bulkDelete = useBulkDeleteTasks();
@@ -76,16 +93,6 @@ export function TasksPageClient() {
     setPrevSearch(search);
     setSearchInput(search);
   }
-
-  // Open edit from URL param ?edit=<id>
-  const editId = searchParams.get("edit");
-  const { data: allData } = useTasks({ limit: 100 });
-  useEffect(() => {
-    if (editId && allData) {
-      const t = allData.data.find((t) => t.id === editId);
-      if (t) setEditTask(t);
-    }
-  }, [editId, allData]);
 
   // Open new task from URL param ?new=1
   const newParam = searchParams.get("new");
@@ -111,6 +118,14 @@ export function TasksPageClient() {
     router.push(`${pathname}?${params.toString()}`);
   };
 
+  const setList = (l: SmartList) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (l === "all") params.delete("list");
+    else params.set("list", l);
+    params.delete("page");
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
   const handleSearchChange = (value: string) => {
     setSearchInput(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -123,33 +138,69 @@ export function TasksPageClient() {
     updateParams({ order: order === "asc" ? "desc" : "asc" });
   };
 
-  const handleViewChange = (v: View) => {
-    setView(v);
+  const handleDisplayViewChange = (v: DisplayView) => {
+    setDisplayView(v);
     localStorage.setItem("task-view", v);
   };
+
+  const isSmartView = list !== "all";
+  const isFocused = focusMode;
+  const fetchLimit = isSmartView || isFocused ? SMART_LIMIT : PAGE_LIMIT;
 
   const { data, isLoading } = useTasks({
     status: status || undefined,
     search: search || undefined,
     sort,
     order,
-    page,
-    limit: PAGE_LIMIT,
+    page: isSmartView || isFocused ? 1 : page,
+    limit: fetchLimit,
   });
 
-  const tasks = data?.data ?? [];
-  const total = data?.total ?? 0;
+  const today = startOfDay(new Date());
+  const nextWeek = addDays(today, 7);
 
-  // Keyboard shortcuts
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      if (e.key === "n") { e.preventDefault(); setNewTaskOpen(true); }
-      if (e.key === "/" ) { e.preventDefault(); searchRef.current?.focus(); }
-      if (e.key === "Escape") { setNewTaskOpen(false); setEditTask(null); }
-    },
-    []
-  );
+  const displayTasks = useMemo(() => {
+    const all = data?.data ?? [];
+    if (focusMode) {
+      return all.filter(
+        (t) =>
+          (t.due_date && isSameDay(parseISO(t.due_date), today)) ||
+          t.status === "in_progress"
+      );
+    }
+    switch (list) {
+      case "inbox":
+        return all.filter((t) => !t.due_date);
+      case "today":
+        return all.filter((t) => t.due_date && isSameDay(parseISO(t.due_date), today));
+      case "upcoming":
+        return all.filter(
+          (t) =>
+            t.due_date &&
+            isAfter(parseISO(t.due_date), today) &&
+            isBefore(parseISO(t.due_date), nextWeek)
+        );
+      case "overdue":
+        return all.filter(
+          (t) =>
+            t.due_date &&
+            isBefore(parseISO(t.due_date), today) &&
+            t.status !== "done"
+        );
+      default:
+        return all;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, focusMode, list]);
+
+  const displayTotal = isSmartView || isFocused ? displayTasks.length : (data?.total ?? 0);
+
+  // Keyboard shortcuts (/ to search, Esc to exit focus)
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+    if (e.key === "/") { e.preventDefault(); searchRef.current?.focus(); }
+    if (e.key === "Escape") setFocusMode(false);
+  }, []);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -165,7 +216,7 @@ export function TasksPageClient() {
   };
 
   const handleSelectAll = (checked: boolean) => {
-    setSelected(checked ? new Set(tasks.map((t) => t.id)) : new Set());
+    setSelected(checked ? new Set(displayTasks.map((t) => t.id)) : new Set());
   };
 
   const handleBulkStatus = async (s: string) => {
@@ -180,199 +231,329 @@ export function TasksPageClient() {
     toast.success(`${selected.size} tasks deleted`);
   };
 
-  return (
-    <div className="flex flex-col gap-6">
-      {/* Page header */}
-      <div className="flex items-center justify-between animate-in fade-in-0 slide-in-from-bottom-3 duration-400 stagger-1">
-        <div>
-          <h2 className="text-xl font-bold tracking-tight">My Tasks</h2>
-          {!isLoading && (
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {total} {total === 1 ? "task" : "tasks"}
-            </p>
+  const currentSmartNav = SMART_NAV.find((n) => n.id === list) ?? SMART_NAV[4];
+  const emptyDesc = currentSmartNav.desc;
+
+  // Focus mode overlay
+  if (focusMode) {
+    return (
+      <div className="fixed inset-0 z-50 bg-background/98 backdrop-blur flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2">
+            <Focus className="size-4 text-primary" />
+            <span className="font-semibold text-sm">Focus Mode</span>
+            <span className="text-xs text-muted-foreground ml-2">
+              {displayTasks.length} task{displayTasks.length !== 1 ? "s" : ""}
+            </span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setFocusMode(false)} className="text-xs gap-1.5">
+            <X className="size-3.5" />
+            Exit <span className="text-muted-foreground">(Esc)</span>
+          </Button>
+        </div>
+        <div className="flex-1 overflow-y-auto max-w-2xl w-full mx-auto px-6 py-8">
+          {isLoading ? (
+            <div className="flex flex-col gap-3">
+              {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+            </div>
+          ) : displayTasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
+              <CheckCircle2 className="size-12 text-emerald-500" />
+              <p className="font-semibold text-lg">All clear!</p>
+              <p className="text-sm text-muted-foreground">No tasks due today or in progress.</p>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {displayTasks.map((task, i) => (
+                <li
+                  key={task.id}
+                  className="flex items-center gap-4 rounded-2xl border border-border bg-card px-5 py-4 shadow-sm hover:shadow-md transition-all duration-150 cursor-pointer group animate-in fade-in-0 slide-in-from-bottom-1"
+                  style={{ animationDelay: `${i * 30}ms` }}
+                  onClick={() => router.push(`/tasks/${task.id}`)}
+                >
+                  <div className={cn(
+                    "size-2.5 rounded-full shrink-0",
+                    task.priority === "high" ? "bg-rose-500" : task.priority === "medium" ? "bg-amber-500" : "bg-emerald-500"
+                  )} />
+                  <span className={cn(
+                    "flex-1 font-medium",
+                    task.status === "done" && "line-through text-muted-foreground"
+                  )}>
+                    {task.title}
+                  </span>
+                  {task.status === "in_progress" && (
+                    <span className="text-xs text-blue-500 font-medium shrink-0">In progress</span>
+                  )}
+                  <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                </li>
+              ))}
+            </ul>
           )}
         </div>
-        <Button onClick={() => setNewTaskOpen(true)} size="sm">
-          <Plus className="w-4 h-4" />
-          New Task
-        </Button>
+        <p className="text-center text-xs text-muted-foreground pb-4">Press Esc to exit focus mode</p>
       </div>
+    );
+  }
 
-      {/* Filter bar */}
-      <div className="flex flex-wrap gap-2 items-center animate-in fade-in-0 slide-in-from-bottom-3 duration-400 stagger-2">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-          <Input
-            ref={searchRef}
-            placeholder="Search tasks..."
-            value={searchInput}
-            onChange={(e) => handleSearchChange(e.target.value)}
-            className="pl-8 w-52"
-          />
+  return (
+    <div className="flex gap-6">
+      {/* Smart list sidebar — lg+ only */}
+      <aside className="hidden lg:flex flex-col gap-0.5 w-40 shrink-0 pt-0.5">
+        {SMART_NAV.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => setList(item.id)}
+            className={cn(
+              "flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left",
+              list === item.id
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+            )}
+          >
+            {item.icon}
+            {item.label}
+          </button>
+        ))}
+        <div className="mt-2 pt-2 border-t border-border">
+          <Link
+            href="/tasks/review"
+            className="flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-all duration-150 w-full"
+          >
+            <CalendarClock className="size-4 text-violet-500" />
+            Daily review
+          </Link>
         </div>
+      </aside>
 
-        <div className="flex items-center gap-1 rounded-xl bg-muted p-1">
-          {statusFilters.map((f) => {
-            const active = (status || "all") === f.value;
-            return (
-              <button
-                key={f.value}
-                onClick={() => updateParams({ status: f.value === "all" ? undefined : f.value })}
-                className={cn(
-                  "rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                  active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {f.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <Select value={sort} onValueChange={(val) => updateParams({ sort: val })}>
-          <SelectTrigger className="w-36 text-xs h-7">
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              <SelectItem value="created_at">Created date</SelectItem>
-              <SelectItem value="due_date">Due date</SelectItem>
-              <SelectItem value="priority">Priority</SelectItem>
-              <SelectItem value="sort_order">Custom order</SelectItem>
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-
-        <Button variant="outline" size="sm" onClick={handleToggleOrder} className="h-7 text-xs gap-1">
-          {order === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
-          {order === "asc" ? "Asc" : "Desc"}
-        </Button>
-
-        <ViewToggle view={view} onChange={handleViewChange} />
-      </div>
-
-      {/* Content */}
-      {isLoading ? (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-xl" />
+      {/* Main content */}
+      <div className="flex-1 min-w-0 flex flex-col gap-6">
+        {/* Mobile smart list pills */}
+        <div className="flex gap-1.5 overflow-x-auto pb-1 lg:hidden -mx-1 px-1">
+          {SMART_NAV.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setList(item.id)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border transition-all",
+                list === item.id
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {item.icon}
+              {item.label}
+            </button>
           ))}
+          <Link
+            href="/tasks/review"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap border border-border text-muted-foreground hover:text-foreground transition-all"
+          >
+            <CalendarClock className="size-3.5 text-violet-500" />
+            Daily review
+          </Link>
         </div>
-      ) : tasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-muted">
-            <ClipboardList className="w-7 h-7 text-muted-foreground" />
-          </div>
+
+        {/* Page header */}
+        <div className="flex items-center justify-between animate-in fade-in-0 slide-in-from-bottom-3 duration-400">
           <div>
-            <p className="font-semibold">No tasks found</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              {search || status ? "Try adjusting your filters" : "Create your first task to get started"}
-            </p>
+            <h2 className="text-xl font-bold tracking-tight">
+              {list === "all" ? "My Tasks" : currentSmartNav.label}
+            </h2>
+            {!isLoading && (
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {displayTotal} {displayTotal === 1 ? "task" : "tasks"}
+              </p>
+            )}
           </div>
-          {!search && !status && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setFocusMode(true)}
+              aria-label="Focus mode"
+              title="Focus mode"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <Focus className="size-4" />
+            </Button>
             <Button onClick={() => setNewTaskOpen(true)} size="sm">
               <Plus className="w-4 h-4" />
-              Create your first task
+              New Task
             </Button>
-          )}
+          </div>
         </div>
-      ) : view === "kanban" ? (
-        <KanbanView tasks={tasks} />
-      ) : (
-        <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500 stagger-3">
-          <div className="hidden md:block rounded-xl border border-border overflow-hidden bg-card shadow-sm">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="w-8">
-                    <input
-                      type="checkbox"
-                      checked={selected.size === tasks.length && tasks.length > 0}
-                      onChange={(e) => handleSelectAll(e.target.checked)}
-                      className="size-4 rounded border-input accent-primary cursor-pointer"
-                    />
-                  </TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead className="w-28">Status</TableHead>
-                  <TableHead className="w-28">Priority</TableHead>
-                  <TableHead className="w-36">Due Date</TableHead>
-                  <TableHead className="w-28" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {tasks.map((task, i) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    index={i}
-                    search={search}
-                    selected={selected.has(task.id)}
-                    onSelectChange={handleSelectChange}
-                  />
-                ))}
-              </TableBody>
-            </Table>
+
+        {/* Filter bar */}
+        <div className="flex flex-wrap gap-2 items-center animate-in fade-in-0 slide-in-from-bottom-3 duration-400">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <Input
+              ref={searchRef}
+              placeholder="Search tasks…"
+              value={searchInput}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-8 w-48"
+            />
           </div>
 
-          <div className="md:hidden flex flex-col gap-2">
-            {tasks.map((task, i) => (
-              <TaskRow key={task.id} task={task} index={i} search={search} />
+          <div className="flex items-center gap-1 rounded-xl bg-muted p-1">
+            {STATUS_FILTERS.map((f) => {
+              const active = (status || "all") === f.value;
+              return (
+                <button
+                  key={f.value}
+                  onClick={() => updateParams({ status: f.value === "all" ? undefined : f.value })}
+                  className={cn(
+                    "rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                    active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <Select value={sort} onValueChange={(val) => updateParams({ sort: val })}>
+            <SelectTrigger className="w-36 text-xs h-7">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value="created_at">Created date</SelectItem>
+                <SelectItem value="due_date">Due date</SelectItem>
+                <SelectItem value="priority">Priority</SelectItem>
+                <SelectItem value="sort_order">Custom order</SelectItem>
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+
+          <Button variant="outline" size="sm" onClick={handleToggleOrder} className="h-7 text-xs gap-1">
+            {order === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+            {order === "asc" ? "Asc" : "Desc"}
+          </Button>
+
+          {list === "all" && <ViewToggle view={displayView} onChange={handleDisplayViewChange} />}
+        </div>
+
+        {/* Content */}
+        {isLoading ? (
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} className="h-14 w-full rounded-xl" />
             ))}
           </div>
-        </div>
-      )}
+        ) : displayTasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+            <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-muted">
+              {list === "overdue" ? (
+                <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+              ) : (
+                <ClipboardList className="w-7 h-7 text-muted-foreground" />
+              )}
+            </div>
+            <div>
+              <p className="font-semibold">
+                {list === "overdue" ? "All caught up!" : "Nothing here"}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">{emptyDesc}</p>
+            </div>
+            {list === "all" && !search && !status && (
+              <Button onClick={() => setNewTaskOpen(true)} size="sm">
+                <Plus className="w-4 h-4" />
+                Create your first task
+              </Button>
+            )}
+          </div>
+        ) : displayView === "kanban" && list === "all" ? (
+          <KanbanView tasks={displayTasks} />
+        ) : (
+          <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500">
+            <div className="hidden md:block rounded-xl border border-border overflow-hidden bg-card shadow-sm">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableHead className="w-8">
+                      <input
+                        type="checkbox"
+                        checked={selected.size === displayTasks.length && displayTasks.length > 0}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        className="size-4 rounded border-input accent-primary cursor-pointer"
+                      />
+                    </TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead className="w-28">Status</TableHead>
+                    <TableHead className="w-28">Priority</TableHead>
+                    <TableHead className="w-36">Due Date</TableHead>
+                    <TableHead className="w-28" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {displayTasks.map((task, i) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      index={i}
+                      search={search}
+                      selected={selected.has(task.id)}
+                      onSelectChange={handleSelectChange}
+                    />
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
-      {/* Pagination */}
-      {!isLoading && total > PAGE_LIMIT && (
-        <Pagination page={page} total={total} limit={PAGE_LIMIT} />
-      )}
+            <div className="md:hidden flex flex-col gap-2">
+              {displayTasks.map((task, i) => (
+                <TaskRow key={task.id} task={task} index={i} search={search} />
+              ))}
+            </div>
+          </div>
+        )}
 
-      {/* Bulk action bar */}
-      {selected.size > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-background border border-border rounded-xl shadow-2xl px-4 py-2.5 animate-in slide-in-from-bottom-3">
-          <span className="text-sm font-medium whitespace-nowrap">{selected.size} selected</span>
-          <Select onValueChange={handleBulkStatus}>
-            <SelectTrigger className="h-7 text-xs w-32">
-              <SelectValue placeholder="Set status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="todo">Todo</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="done">Done</SelectItem>
-                <SelectItem value="failed">Failed</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Select onValueChange={(p) => bulkUpdate.mutateAsync({ ids: [...selected], priority: p }).then(() => { setSelected(new Set()); toast.success(`${selected.size} updated`); })}>
-            <SelectTrigger className="h-7 text-xs w-32">
-              <SelectValue placeholder="Set priority" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={handleBulkDelete}>
-            Delete
-          </Button>
-          <Button variant="ghost" size="icon-sm" className="h-7 w-7" onClick={() => setSelected(new Set())}>
-            <X className="size-3.5" />
-          </Button>
-        </div>
-      )}
+        {/* Pagination — only in "all" non-smart view */}
+        {!isLoading && !isSmartView && data && data.total > PAGE_LIMIT && (
+          <Pagination page={page} total={data.total} limit={PAGE_LIMIT} />
+        )}
 
-      <TaskForm open={newTaskOpen} onOpenChange={setNewTaskOpen} />
-      {editTask && (
-        <TaskForm
-          open={!!editTask}
-          onOpenChange={(o) => { if (!o) { setEditTask(null); const p = new URLSearchParams(searchParams.toString()); p.delete("edit"); router.replace(`${pathname}?${p.toString()}`); } }}
-          task={editTask}
-        />
-      )}
+        {/* Bulk action bar */}
+        {selected.size > 0 && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 bg-background border border-border rounded-xl shadow-2xl px-4 py-2.5 animate-in slide-in-from-bottom-3">
+            <span className="text-sm font-medium whitespace-nowrap">{selected.size} selected</span>
+            <Select onValueChange={handleBulkStatus}>
+              <SelectTrigger className="h-7 text-xs w-32">
+                <SelectValue placeholder="Set status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="todo">Todo</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="done">Done</SelectItem>
+                  <SelectItem value="failed">Failed</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Select onValueChange={(p) => bulkUpdate.mutateAsync({ ids: [...selected], priority: p }).then(() => { setSelected(new Set()); toast.success(`${selected.size} updated`); })}>
+              <SelectTrigger className="h-7 text-xs w-32">
+                <SelectValue placeholder="Set priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <Button variant="destructive" size="sm" className="h-7 text-xs" onClick={handleBulkDelete}>Delete</Button>
+            <Button variant="ghost" size="icon-sm" className="h-7 w-7" onClick={() => setSelected(new Set())}>
+              <X className="size-3.5" />
+            </Button>
+          </div>
+        )}
+
+        <TaskForm open={newTaskOpen} onOpenChange={setNewTaskOpen} />
+      </div>
     </div>
   );
 }

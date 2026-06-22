@@ -6,6 +6,8 @@ import { ThemeToggle } from "@/app/(app)/_components/ThemeToggle";
 import { ActivitySidebar } from "@/app/(app)/_components/ActivitySidebar";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { CommandPaletteProvider } from "@/components/CommandPalette";
+import { QuickCaptureProvider } from "@/lib/quick-capture-context";
+import { QuickCaptureDialog } from "@/components/QuickCaptureDialog";
 import { LogOut, Activity, ShieldCheck } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
@@ -35,6 +37,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const initials = user.email.slice(0, 2).toUpperCase();
 
   return (
+    <QuickCaptureProvider>
     <CommandPaletteProvider>
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
@@ -80,7 +83,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
 
       <ActivitySidebar open={activityOpen} onClose={() => setActivityOpen(false)} />
+      <QuickCaptureDialog />
     </div>
     </CommandPaletteProvider>
+    </QuickCaptureProvider>
   );
 }
