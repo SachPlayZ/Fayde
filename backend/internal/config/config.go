@@ -24,6 +24,13 @@ type Config struct {
 	GroqAPIKey           string
 	GitHubWebhookSecret  string
 	FrontendURL          string
+	AppURL               string
+	ResendAPIKey         string
+	ResendFrom           string
+	GoogleClientID       string
+	GoogleClientSecret   string
+	GitHubClientID       string
+	GitHubClientSecret   string
 }
 
 // Load reads configuration from environment variables.
@@ -66,6 +73,16 @@ func Load() (*Config, error) {
 		frontendURL = "http://localhost:3000"
 	}
 
+	appURL := os.Getenv("APP_URL")
+	if appURL == "" {
+		appURL = "http://localhost:8080"
+	}
+
+	resendFrom := os.Getenv("RESEND_FROM")
+	if resendFrom == "" {
+		resendFrom = "noreply@rivz.app"
+	}
+
 	return &Config{
 		DatabaseURL:         dbURL,
 		JWTSecret:           jwtSecret,
@@ -83,5 +100,12 @@ func Load() (*Config, error) {
 		GroqAPIKey:          os.Getenv("GROQ_API_KEY"),
 		GitHubWebhookSecret: os.Getenv("GITHUB_WEBHOOK_SECRET"),
 		FrontendURL:         frontendURL,
+		AppURL:              appURL,
+		ResendAPIKey:        os.Getenv("RESEND_API_KEY"),
+		ResendFrom:          resendFrom,
+		GoogleClientID:      os.Getenv("GOOGLE_CLIENT_ID"),
+		GoogleClientSecret:  os.Getenv("GOOGLE_CLIENT_SECRET"),
+		GitHubClientID:      os.Getenv("GITHUB_CLIENT_ID"),
+		GitHubClientSecret:  os.Getenv("GITHUB_CLIENT_SECRET"),
 	}, nil
 }

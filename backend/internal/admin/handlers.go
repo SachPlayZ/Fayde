@@ -3,6 +3,7 @@ package admin
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -254,6 +255,154 @@ func (h *Handler) Analytics(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	httputil.JSON(w, http.StatusOK, resp)
+}
+
+// trackRequest is the body for POST /track.
+type trackRequest struct {
+	Path      string  `json:"path"`
+	SessionID string  `json:"session_id"`
+	UserID    *string `json:"user_id,omitempty"`
+}
+
+// TrackPageView handles POST /track.
+// Public endpoint — no auth required.
+func (h *Handler) TrackPageView(w http.ResponseWriter, r *http.Request) {
+	var req trackRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" || req.SessionID == "" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	_, _ = h.pool.Exec(r.Context(),
+		`INSERT INTO page_views (path, user_id, session_id) VALUES ($1, $2::uuid, $3)`,
+		req.Path, req.UserID, req.SessionID,
+	)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+type siteMetricsResponse struct {
+	TotalUsers     int          `json:"total_users"`
+	NewUsers       []dailyCount `json:"new_users"`
+	TotalViews     int          `json:"total_views"`
+	PageViews      []dailyViews `json:"page_views"`
+	UniqueVisitors int          `json:"unique_visitors"`
+	TopPages       []pageCount  `json:"top_pages"`
+	ActiveUsers7d  int          `json:"active_users_7d"`
+}
+
+type dailyCount struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
+type dailyViews struct {
+	Date   string `json:"date"`
+	Views  int    `json:"views"`
+	Unique int    `json:"unique"`
+}
+
+type pageCount struct {
+	Path  string `json:"path"`
+	Count int    `json:"count"`
+}
+
+// SiteMetrics handles GET /admin/site-metrics?range=7d|30d|90d.
+func (h *Handler) SiteMetrics(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	rangeDays := 30
+	switch r.URL.Query().Get("range") {
+	case "7d":
+		rangeDays = 7
+	case "90d":
+		rangeDays = 90
+	}
+
+	resp := siteMetricsResponse{
+		NewUsers:  []dailyCount{},
+		PageViews: []dailyViews{},
+		TopPages:  []pageCount{},
+	}
+
+	// Total users.
+	_ = h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&resp.TotalUsers)
+
+	// New users per day in range.
+	newUsersRows, err := h.pool.Query(ctx, `
+		WITH days AS (
+			SELECT generate_series(
+				(CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day')::date,
+				CURRENT_DATE::date,
+				'1 day'::interval
+			)::date AS d
+		)
+		SELECT days.d::text, COUNT(u.id)
+		FROM days
+		LEFT JOIN users u ON u.created_at::date = days.d
+		GROUP BY days.d ORDER BY days.d`, rangeDays)
+	if err == nil {
+		defer newUsersRows.Close()
+		for newUsersRows.Next() {
+			var dc dailyCount
+			if newUsersRows.Scan(&dc.Date, &dc.Count) == nil {
+				resp.NewUsers = append(resp.NewUsers, dc)
+			}
+		}
+	}
+
+	// Total page views in range.
+	_ = h.pool.QueryRow(ctx, `SELECT COUNT(*) FROM page_views WHERE created_at >= now() - $1::int * INTERVAL '1 day'`, rangeDays).Scan(&resp.TotalViews)
+
+	// Unique visitors (distinct session_ids) in range.
+	_ = h.pool.QueryRow(ctx, `SELECT COUNT(DISTINCT session_id) FROM page_views WHERE created_at >= now() - $1::int * INTERVAL '1 day'`, rangeDays).Scan(&resp.UniqueVisitors)
+
+	// Page views + unique sessions per day in range.
+	pvRows, err := h.pool.Query(ctx, `
+		WITH days AS (
+			SELECT generate_series(
+				(CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day')::date,
+				CURRENT_DATE::date,
+				'1 day'::interval
+			)::date AS d
+		)
+		SELECT days.d::text,
+			COUNT(pv.id) AS views,
+			COUNT(DISTINCT pv.session_id) AS unique_sessions
+		FROM days
+		LEFT JOIN page_views pv ON pv.created_at::date = days.d
+		GROUP BY days.d ORDER BY days.d`, rangeDays)
+	if err == nil {
+		defer pvRows.Close()
+		for pvRows.Next() {
+			var dv dailyViews
+			if pvRows.Scan(&dv.Date, &dv.Views, &dv.Unique) == nil {
+				resp.PageViews = append(resp.PageViews, dv)
+			}
+		}
+	}
+
+	// Top 8 pages in range.
+	topRows, err := h.pool.Query(ctx, `
+		SELECT path, COUNT(*) AS cnt
+		FROM page_views
+		WHERE created_at >= now() - $1::int * INTERVAL '1 day'
+		GROUP BY path ORDER BY cnt DESC LIMIT 8`, rangeDays)
+	if err == nil {
+		defer topRows.Close()
+		for topRows.Next() {
+			var pc pageCount
+			if topRows.Scan(&pc.Path, &pc.Count) == nil {
+				resp.TopPages = append(resp.TopPages, pc)
+			}
+		}
+	}
+
+	// Active users in last 7 days (always 7d regardless of range).
+	_ = h.pool.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT user_id)
+		FROM page_views
+		WHERE user_id IS NOT NULL AND created_at >= now() - INTERVAL '7 days'`).Scan(&resp.ActiveUsers7d)
 
 	httputil.JSON(w, http.StatusOK, resp)
 }

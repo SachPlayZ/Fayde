@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	emailpkg "github.com/SachPlayZ/rivz-asn/backend/internal/email"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/activitylog"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/admin"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/apitokens"
@@ -69,8 +70,15 @@ func run() error {
 
 	// Auth.
 	authRepo := auth.NewRepository(pool)
-	authSvc := auth.NewService(authRepo, cfg.JWTSecret)
+	emailClient := emailpkg.New(cfg.ResendAPIKey, cfg.ResendFrom)
+	authSvc := auth.NewService(authRepo, cfg.JWTSecret, emailClient, cfg.FrontendURL)
 	authHandler := auth.NewHandler(authSvc)
+	oauthHandler := auth.NewOAuthHandler(
+		cfg.GoogleClientID, cfg.GoogleClientSecret,
+		cfg.GitHubClientID, cfg.GitHubClientSecret,
+		cfg.AppURL, cfg.FrontendURL, cfg.JWTSecret,
+		authRepo, authSvc,
+	)
 
 	// Activity log.
 	activityRepo := activitylog.NewRepository(pool)
@@ -213,7 +221,7 @@ func run() error {
 		JWTSecret:  cfg.JWTSecret,
 		CORSOrigin: cfg.CORSOrigin,
 	},
-		authHandler, tasksHandler, adminHandler, sseHandler, attachmentsHandler,
+		authHandler, oauthHandler, tasksHandler, adminHandler, sseHandler, attachmentsHandler,
 		subtasksHandler, tagsHandler, commentsHandler, depsHandler, notifHandler,
 		projectsHandler, timeHandler, sprintsHandler, templatesHandler,
 		cfHandler, watchersHandler, sfHandler, apiTokensHandler, totpHandler,

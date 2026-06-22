@@ -1,7 +1,8 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { format, formatDistanceToNow } from "date-fns";
-import { useAdminTasks, useAdminUsers } from "@/lib/admin-hooks";
+import { useAdminUsers } from "@/lib/admin-hooks";
+import { useSiteMetrics } from "@/lib/site-metrics-hooks";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Table,
@@ -12,205 +13,41 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Search, Users, ClipboardList, CheckCircle2, Clock, Circle, ShieldCheck, BarChart2 } from "lucide-react";
-import { AnalyticsTab } from "./_components/AnalyticsTab";
+import { Users, ShieldCheck, TrendingUp } from "lucide-react";
+import { SiteMetricsTab } from "./_components/SiteMetricsTab";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid } from "recharts";
+import { format as dateFmt } from "date-fns";
 
-const statusConfig = {
-  todo: { label: "Todo", className: "bg-muted text-muted-foreground" },
-  in_progress: { label: "In Progress", className: "bg-blue-500/10 text-blue-600 dark:text-blue-400" },
-  done: { label: "Done", className: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" },
-  failed: { label: "Failed", className: "bg-rose-500/10 text-rose-600 dark:text-rose-400" },
+const growthConfig: ChartConfig = {
+  count: { label: "New Users", color: "hsl(var(--chart-2))" },
 };
 
-const priorityConfig = {
-  low: { label: "Low", dot: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-500/8" },
-  medium: { label: "Medium", dot: "bg-amber-500", text: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/8" },
-  high: { label: "High", dot: "bg-rose-500", text: "text-rose-600 dark:text-rose-400", bg: "bg-rose-500/8" },
-};
-
-function StatusPill({ status }: { status: string }) {
-  const cfg = statusConfig[status as keyof typeof statusConfig];
-  if (!cfg) return <span className="text-xs text-muted-foreground capitalize">{status}</span>;
-  return (
-    <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium", cfg.className)}>
-      {cfg.label}
-    </span>
-  );
-}
-
-function PriorityPill({ priority }: { priority: string }) {
-  const cfg = priorityConfig[priority as keyof typeof priorityConfig];
-  if (!cfg) return <span className="text-xs text-muted-foreground capitalize">{priority}</span>;
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium", cfg.text, cfg.bg)}>
-      <span className={cn("size-1.5 rounded-full shrink-0", cfg.dot)} />
-      {cfg.label}
-    </span>
-  );
-}
-
-const statusFilters = [
-  { value: "all", label: "All" },
-  { value: "todo", label: "Todo" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "done", label: "Done" },
-  { value: "failed", label: "Failed" },
-];
-
-function AllTasksTab() {
-  const [search, setSearch] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [status, setStatus] = useState("all");
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const handleSearch = (val: string) => {
-    setSearch(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setSearchQuery(val), 350);
-  };
-
-  const { data, isLoading } = useAdminTasks({
-    limit: 100,
-    status: status === "all" ? undefined : status,
-    search: searchQuery || undefined,
-  });
-
-  const tasks = data?.data ?? [];
-  const total = data?.total ?? 0;
-
-  const doneTasks = tasks.filter((t) => t.status === "done").length;
-  const inProgressTasks = tasks.filter((t) => t.status === "in_progress").length;
-  const highPriorityTasks = tasks.filter((t) => t.priority === "high").length;
-
-  return (
-    <div className="flex flex-col gap-4 mt-4">
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "Total tasks", value: total, icon: ClipboardList, color: "text-foreground" },
-          { label: "Done", value: doneTasks, icon: CheckCircle2, color: "text-emerald-500" },
-          { label: "In progress", value: inProgressTasks, icon: Clock, color: "text-blue-500" },
-          { label: "High priority", value: highPriorityTasks, icon: Circle, color: "text-rose-500" },
-        ].map((s, i) => (
-          <div
-            key={s.label}
-            className="rounded-xl border border-border bg-card px-4 py-3 flex items-center gap-3 animate-in fade-in-0 slide-in-from-bottom-3 duration-400"
-            style={{ animationDelay: `${i * 60}ms` }}
-          >
-            <s.icon className={cn("size-4 shrink-0", s.color)} />
-            <div>
-              <p className="text-[11px] text-muted-foreground leading-tight">{s.label}</p>
-              <p className="text-lg font-semibold leading-tight">{isLoading ? "—" : s.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2 items-center animate-in fade-in-0 slide-in-from-bottom-2 duration-400 stagger-2">
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-          <Input
-            placeholder="Search tasks..."
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="pl-8 w-52"
-          />
-        </div>
-        <div className="flex items-center gap-1 rounded-xl bg-muted p-1">
-          {statusFilters.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setStatus(f.value)}
-              className={cn(
-                "rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-150",
-                status === f.value
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Table */}
-      {isLoading ? (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-12 w-full rounded-xl" />
-          ))}
-        </div>
-      ) : tasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3 text-center rounded-xl border border-border bg-card">
-          <ClipboardList className="size-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No tasks match your filters</p>
-        </div>
-      ) : (
-        <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-400 stagger-3">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/40 hover:bg-muted/40">
-                <TableHead>Title</TableHead>
-                <TableHead className="w-40">User</TableHead>
-                <TableHead className="w-28">Status</TableHead>
-                <TableHead className="w-28">Priority</TableHead>
-                <TableHead className="w-32">Due Date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {tasks.map((task, i) => (
-                <TableRow
-                  key={task.id}
-                  className="group animate-in fade-in-0 duration-300"
-                  style={{ animationDelay: `${i * 25}ms` }}
-                >
-                  <TableCell>
-                    <span className={cn("font-medium text-sm", task.status === "done" && "line-through text-muted-foreground")}>
-                      {task.title}
-                    </span>
-                    {task.description && (
-                      <p className="text-xs text-muted-foreground truncate max-w-xs mt-0.5">{task.description}</p>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground font-mono">{task.user_email}</span>
-                  </TableCell>
-                  <TableCell><StatusPill status={task.status} /></TableCell>
-                  <TableCell><PriorityPill priority={task.priority} /></TableCell>
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground">
-                      {task.due_date ? format(new Date(task.due_date), "MMM d, yyyy") : "—"}
-                    </span>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-    </div>
-  );
+function fmtDate(d: unknown) {
+  if (typeof d !== "string") return String(d ?? "");
+  try { return dateFmt(new Date(d), "MMM d"); } catch { return d; }
 }
 
 function UsersTab() {
   const { data: users, isLoading } = useAdminUsers();
+  const { data: metrics } = useSiteMetrics("30d");
   const list = users ?? [];
 
   const admins = list.filter((u) => u.role === "admin").length;
-  const totalTasks = list.reduce((sum, u) => sum + u.task_count, 0);
 
   return (
-    <div className="flex flex-col gap-4 mt-4">
+    <div className="flex flex-col gap-6 mt-4">
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
         {[
           { label: "Total users", value: list.length, icon: Users, color: "text-foreground" },
           { label: "Admins", value: admins, icon: ShieldCheck, color: "text-primary" },
-          { label: "Total tasks", value: totalTasks, icon: ClipboardList, color: "text-blue-500" },
         ].map((s, i) => (
           <div
             key={s.label}
@@ -226,6 +63,29 @@ function UsersTab() {
         ))}
       </div>
 
+      {/* User growth chart */}
+      {metrics?.new_users && metrics.new_users.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-sm font-semibold mb-4">User Growth (30d)</p>
+          <ChartContainer config={growthConfig} className="h-40 w-full">
+            <AreaChart data={metrics.new_users}>
+              <defs>
+                <linearGradient id="fillGrowth" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="var(--color-count)" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="var(--color-count)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border/50" />
+              <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
+              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+              <ChartTooltip content={<ChartTooltipContent />} labelFormatter={fmtDate} />
+              <Area type="monotone" dataKey="count" stroke="var(--color-count)" fill="url(#fillGrowth)" strokeWidth={2} dot={false} />
+            </AreaChart>
+          </ChartContainer>
+        </div>
+      )}
+
+      {/* Users table */}
       {isLoading ? (
         <div className="flex flex-col gap-2">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -238,13 +98,12 @@ function UsersTab() {
           <p className="text-sm text-muted-foreground">No users found</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-400 stagger-3">
+        <div className="rounded-xl border border-border overflow-hidden bg-card shadow-sm animate-in fade-in-0 slide-in-from-bottom-2 duration-400">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40 hover:bg-muted/40">
                 <TableHead>Email</TableHead>
                 <TableHead className="w-24">Role</TableHead>
-                <TableHead className="w-20">Tasks</TableHead>
                 <TableHead className="w-36">Joined</TableHead>
               </TableRow>
             </TableHeader>
@@ -277,9 +136,6 @@ function UsersTab() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span className="text-sm font-medium">{u.task_count}</span>
-                  </TableCell>
-                  <TableCell>
                     <div className="flex flex-col">
                       <span className="text-xs text-muted-foreground">
                         {format(new Date(u.created_at), "MMM d, yyyy")}
@@ -302,33 +158,26 @@ function UsersTab() {
 export default function AdminPage() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="animate-in fade-in-0 slide-in-from-bottom-3 duration-400 stagger-1">
+      <div className="animate-in fade-in-0 slide-in-from-bottom-3 duration-400">
         <h2 className="text-xl font-bold tracking-tight">Admin Dashboard</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">Overview of all users and tasks</p>
+        <p className="text-sm text-muted-foreground mt-0.5">Site metrics and user analytics</p>
       </div>
-      <Tabs defaultValue="tasks">
+      <Tabs defaultValue="metrics">
         <TabsList className="bg-muted p-1 rounded-xl">
-          <TabsTrigger value="tasks" className="rounded-lg text-xs">
-            <ClipboardList className="size-3.5 mr-1.5" />
-            All Tasks
+          <TabsTrigger value="metrics" className="rounded-lg text-xs">
+            <TrendingUp className="size-3.5 mr-1.5" />
+            Site Metrics
           </TabsTrigger>
           <TabsTrigger value="users" className="rounded-lg text-xs">
             <Users className="size-3.5 mr-1.5" />
             Users
           </TabsTrigger>
-          <TabsTrigger value="analytics" className="rounded-lg text-xs">
-            <BarChart2 className="size-3.5 mr-1.5" />
-            Analytics
-          </TabsTrigger>
         </TabsList>
-        <TabsContent value="tasks">
-          <AllTasksTab />
+        <TabsContent value="metrics">
+          <SiteMetricsTab />
         </TabsContent>
         <TabsContent value="users">
           <UsersTab />
-        </TabsContent>
-        <TabsContent value="analytics">
-          <div className="mt-4"><AnalyticsTab /></div>
         </TabsContent>
       </Tabs>
     </div>

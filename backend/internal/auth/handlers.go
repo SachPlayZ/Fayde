@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -29,6 +30,7 @@ type signupRequest struct {
 }
 
 // Signup handles POST /auth/signup.
+// On success returns 201 with a message — no token until email is verified.
 func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 	var req signupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -41,8 +43,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.svc.Signup(r.Context(), strings.ToLower(req.Email), req.Password)
-	if err != nil {
+	if err := h.svc.Signup(r.Context(), strings.ToLower(req.Email), req.Password); err != nil {
 		if isDuplicateEmailError(err) {
 			httputil.Error(w, http.StatusConflict, "email already registered")
 			return
@@ -51,15 +52,19 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.JSON(w, http.StatusCreated, authResponse{
-		Token: result.Token,
-		User:  PublicUser{ID: result.User.ID, Email: result.User.Email, Role: result.User.Role},
-	})
+	httputil.JSON(w, http.StatusCreated, map[string]string{"message": "verification email sent"})
 }
 
 type loginRequest struct {
 	Email    string `json:"email"    validate:"required,email"`
 	Password string `json:"password" validate:"required"`
+}
+
+// unverifiedError is the JSON body returned when a login attempt is made by an unverified user.
+type unverifiedError struct {
+	Code    string `json:"code"`
+	Email   string `json:"email"`
+	Message string `json:"message"`
 }
 
 // Login handles POST /auth/login.
@@ -77,6 +82,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	result, err := h.svc.Login(r.Context(), strings.ToLower(req.Email), req.Password)
 	if err != nil {
+		if errors.Is(err, ErrEmailNotVerified) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(unverifiedError{
+				Code:    "unverified",
+				Email:   req.Email,
+				Message: "please verify your email before logging in",
+			})
+			return
+		}
+		if errors.Is(err, ErrOAuthAccount) {
+			httputil.Error(w, http.StatusBadRequest, "this account uses social login — please sign in with Google or GitHub")
+			return
+		}
 		httputil.Error(w, http.StatusUnauthorized, "invalid email or password")
 		return
 	}
@@ -85,6 +104,51 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Token: result.Token,
 		User:  PublicUser{ID: result.User.ID, Email: result.User.Email, Role: result.User.Role},
 	})
+}
+
+type verifyEmailRequest struct {
+	Token string `json:"token" validate:"required"`
+}
+
+// VerifyEmail handles POST /auth/verify-email.
+func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
+	var req verifyEmailRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	result, err := h.svc.VerifyEmail(r.Context(), req.Token)
+	if err != nil {
+		if errors.Is(err, ErrTokenExpired) {
+			httputil.Error(w, http.StatusGone, "verification link has expired")
+			return
+		}
+		httputil.Error(w, http.StatusBadRequest, "invalid or already used verification link")
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, authResponse{
+		Token: result.Token,
+		User:  PublicUser{ID: result.User.ID, Email: result.User.Email, Role: result.User.Role},
+	})
+}
+
+type resendRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+// ResendVerification handles POST /auth/resend-verification.
+func (h *Handler) ResendVerification(w http.ResponseWriter, r *http.Request) {
+	var req resendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	// Always 204 — don't leak whether email exists.
+	_ = h.svc.ResendVerification(r.Context(), strings.ToLower(req.Email))
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // Me handles GET /auth/me — returns the authenticated user's profile.

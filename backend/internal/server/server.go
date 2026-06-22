@@ -38,6 +38,7 @@ import (
 func New(
 	cfg ServerConfig,
 	authHandler *auth.Handler,
+	oauthHandler *auth.OAuthHandler,
 	tasksHandler *tasks.Handler,
 	adminHandler *admin.Handler,
 	sseHandler *sse.Handler,
@@ -84,12 +85,19 @@ func New(
 	})
 
 	// Public routes (no auth).
+	r.Post("/track", adminHandler.TrackPageView)
 	r.Get("/share/{token}", sharingHandler.PublicView)
 	r.Post("/webhooks/github", githubHandler.Webhook)
 
 	// Auth routes.
 	r.Post("/auth/signup", authHandler.Signup)
 	r.Post("/auth/login", authHandler.Login)
+	r.Post("/auth/verify-email", authHandler.VerifyEmail)
+	r.Post("/auth/resend-verification", authHandler.ResendVerification)
+	r.Get("/auth/google", oauthHandler.GoogleLogin)
+	r.Get("/auth/google/callback", oauthHandler.GoogleCallback)
+	r.Get("/auth/github", oauthHandler.GitHubLogin)
+	r.Get("/auth/github/callback", oauthHandler.GitHubCallback)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Get("/auth/me", authHandler.Me)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Patch("/auth/me/preferences", authHandler.UpdatePreferences)
 
@@ -250,6 +258,7 @@ func New(
 		r.Get("/admin/tasks", adminHandler.ListTasks)
 		r.Get("/admin/users", adminHandler.ListUsers)
 		r.Get("/admin/analytics", adminHandler.Analytics)
+		r.Get("/admin/site-metrics", adminHandler.SiteMetrics)
 	})
 
 	return r

@@ -6,13 +6,16 @@ import "time"
 
 // User represents an application user as stored in the database.
 type User struct {
-	ID             string    `json:"id"`
-	Email          string    `json:"email"`
-	PasswordHash   string    `json:"-"`
-	Role           string    `json:"role"`
-	Theme          string    `json:"theme"`
-	DigestEnabled  bool      `json:"digest_enabled"`
-	CreatedAt      time.Time `json:"created_at"`
+	ID            string    `json:"id"`
+	Email         string    `json:"email"`
+	passwordHash  *string   // nil for OAuth-only users
+	Role          string    `json:"role"`
+	Theme         string    `json:"theme"`
+	DigestEnabled bool      `json:"digest_enabled"`
+	EmailVerified bool      `json:"email_verified"`
+	Provider      string    `json:"provider"`
+	ProviderID    *string   `json:"-"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // PublicUser is the subset of User safe to include in API responses.

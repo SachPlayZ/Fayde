@@ -12,6 +12,7 @@ import { PomodoroTimer } from "@/components/PomodoroTimer";
 import { LogOut, Activity, ShieldCheck, ClipboardList, FolderKanban, Zap, Settings } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
+import { PageTracker } from "@/components/PageTracker";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, loading } = useAuth();
@@ -40,6 +41,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <QuickCaptureProvider>
     <CommandPaletteProvider>
+    <PageTracker userId={user?.id} />
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
