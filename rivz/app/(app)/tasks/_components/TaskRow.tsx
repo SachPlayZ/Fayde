@@ -123,6 +123,12 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
   const priority = priorityConfig[task.priority];
   const overdue = isOverdue(task.due_date);
   const isDone = task.status === "done";
+  const isFailed = task.status === "failed";
+  const titleClass = isDone
+    ? "line-through text-emerald-600 dark:text-emerald-400"
+    : isFailed
+    ? "line-through text-rose-600 dark:text-rose-400"
+    : "";
 
   return (
     <>
@@ -153,7 +159,7 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
         </TableCell>
 
         <TableCell>
-          <span className={cn("font-medium text-sm", isDone && "line-through text-muted-foreground")}>
+          <span className={cn("font-medium text-sm", titleClass)}>
             <Highlight text={task.title} query={search} />
           </span>
           <div className="flex items-center gap-2 mt-0.5">
@@ -294,7 +300,7 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
             aria-label={`Mark "${task.title}" as ${isDone ? "not done" : "done"}`}
           />
           <div className="flex-1 min-w-0">
-            <p className={cn("font-medium text-sm", isDone && "line-through text-muted-foreground")}>
+            <p className={cn("font-medium text-sm", titleClass)}>
               <Highlight text={task.title} query={search} />
             </p>
             {task.description && (

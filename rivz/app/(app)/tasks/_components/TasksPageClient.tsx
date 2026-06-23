@@ -165,37 +165,48 @@ export function TasksPageClient() {
   const today = startOfDay(new Date());
   const nextWeek = addDays(today, 7);
 
+  const STATUS_ORDER: Record<string, number> = { in_progress: 0, todo: 1, done: 2, failed: 3 };
+
   const displayTasks = useMemo(() => {
     const all = data?.data ?? [];
+    let filtered: typeof all;
     if (focusMode) {
-      return all.filter(
+      filtered = all.filter(
         (t) =>
           (t.due_date && isSameDay(parseISO(t.due_date), today)) ||
           t.status === "in_progress"
       );
+    } else {
+      switch (list) {
+        case "inbox":
+          filtered = all.filter((t) => !t.due_date);
+          break;
+        case "today":
+          filtered = all.filter((t) => t.due_date && isSameDay(parseISO(t.due_date), today));
+          break;
+        case "upcoming":
+          filtered = all.filter(
+            (t) =>
+              t.due_date &&
+              isAfter(parseISO(t.due_date), today) &&
+              isBefore(parseISO(t.due_date), nextWeek)
+          );
+          break;
+        case "overdue":
+          filtered = all.filter(
+            (t) =>
+              t.due_date &&
+              isBefore(parseISO(t.due_date), today) &&
+              t.status !== "done"
+          );
+          break;
+        default:
+          filtered = all;
+      }
     }
-    switch (list) {
-      case "inbox":
-        return all.filter((t) => !t.due_date);
-      case "today":
-        return all.filter((t) => t.due_date && isSameDay(parseISO(t.due_date), today));
-      case "upcoming":
-        return all.filter(
-          (t) =>
-            t.due_date &&
-            isAfter(parseISO(t.due_date), today) &&
-            isBefore(parseISO(t.due_date), nextWeek)
-        );
-      case "overdue":
-        return all.filter(
-          (t) =>
-            t.due_date &&
-            isBefore(parseISO(t.due_date), today) &&
-            t.status !== "done"
-        );
-      default:
-        return all;
-    }
+    return [...filtered].sort(
+      (a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1)
+    );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, focusMode, list]);
 
