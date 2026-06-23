@@ -14,9 +14,37 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Fayde",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
+  ),
+  title: {
+    default: "Fayde",
+    template: "%s | Fayde",
+  },
   description: "Fayde — your personal productivity suite",
   manifest: "/manifest.json",
+  openGraph: {
+    title: "Fayde",
+    description: "Fayde — your personal productivity suite",
+    url: "/",
+    siteName: "Fayde",
+    images: [
+      {
+        url: "/logo.png",
+        width: 512,
+        height: 512,
+        alt: "Fayde Logo",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary", // Displays a square card with the logo. Change to 'summary_large_image' if you add a wide 1200x630 banner
+    title: "Fayde",
+    description: "Fayde — your personal productivity suite",
+    images: ["/logo.png"],
+  },
 };
 
 export default function RootLayout({
