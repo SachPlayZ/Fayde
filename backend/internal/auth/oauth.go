@@ -102,7 +102,7 @@ func (h *OAuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.finishOAuth(w, r, info.Email, "google", info.ID)
+	h.finishOAuth(w, r, info.Email, "google", info.ID, info.Name, info.Picture)
 }
 
 // GitHubLogin redirects the user to GitHub's consent screen.
@@ -132,18 +132,18 @@ func (h *OAuthHandler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	email, id, err := fetchGitHubUserInfo(r.Context(), tok.AccessToken)
+	email, id, name, avatarURL, err := fetchGitHubUserInfo(r.Context(), tok.AccessToken)
 	if err != nil || email == "" {
 		http.Redirect(w, r, h.frontendURL+"/login?error=oauth", http.StatusFound)
 		return
 	}
 
-	h.finishOAuth(w, r, email, "github", id)
+	h.finishOAuth(w, r, email, "github", id, name, avatarURL)
 }
 
 // finishOAuth upserts the user, issues a JWT, and redirects to the frontend callback page.
-func (h *OAuthHandler) finishOAuth(w http.ResponseWriter, r *http.Request, email, provider, providerID string) {
-	user, err := h.repo.UpsertOAuthUser(r.Context(), strings.ToLower(email), provider, providerID)
+func (h *OAuthHandler) finishOAuth(w http.ResponseWriter, r *http.Request, email, provider, providerID, displayName, avatarURL string) {
+	user, err := h.repo.UpsertOAuthUser(r.Context(), strings.ToLower(email), provider, providerID, displayName, avatarURL)
 	if err != nil {
 		http.Redirect(w, r, h.frontendURL+"/login?error=oauth", http.StatusFound)
 		return
@@ -199,8 +199,10 @@ func (h *OAuthHandler) sign(msg string) string {
 // --- Provider-specific user info fetchers ---
 
 type googleUserInfo struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
+	ID      string `json:"id"`
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+	Picture string `json:"picture"`
 }
 
 func fetchGoogleUserInfo(accessToken string) (*googleUserInfo, error) {
@@ -222,8 +224,10 @@ func fetchGoogleUserInfo(accessToken string) (*googleUserInfo, error) {
 }
 
 type githubUser struct {
-	ID    int    `json:"id"`
-	Email string `json:"email"`
+	ID        int    `json:"id"`
+	Email     string `json:"email"`
+	Name      string `json:"name"`
+	AvatarURL string `json:"avatar_url"`
 }
 
 type githubEmail struct {
@@ -232,7 +236,7 @@ type githubEmail struct {
 	Verified bool   `json:"verified"`
 }
 
-func fetchGitHubUserInfo(ctx context.Context, accessToken string) (email, id string, err error) {
+func fetchGitHubUserInfo(ctx context.Context, accessToken string) (email, id, name, avatarURL string, err error) {
 	do := func(url string, out any) error {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		req.Header.Set("Authorization", "Bearer "+accessToken)
@@ -248,24 +252,26 @@ func fetchGitHubUserInfo(ctx context.Context, accessToken string) (email, id str
 
 	var user githubUser
 	if err := do("https://api.github.com/user", &user); err != nil {
-		return "", "", err
+		return "", "", "", "", err
 	}
 	id = strconv.Itoa(user.ID)
+	name = user.Name
+	avatarURL = user.AvatarURL
 
 	// Use account email if set publicly.
 	if user.Email != "" {
-		return user.Email, id, nil
+		return user.Email, id, name, avatarURL, nil
 	}
 
 	// Fall back to fetching the primary verified email.
 	var emails []githubEmail
 	if err := do("https://api.github.com/user/emails", &emails); err != nil {
-		return "", id, err
+		return "", id, name, avatarURL, err
 	}
 	for _, e := range emails {
 		if e.Primary && e.Verified {
-			return e.Email, id, nil
+			return e.Email, id, name, avatarURL, nil
 		}
 	}
-	return "", id, errors.New("github: no verified primary email found")
+	return "", id, name, avatarURL, errors.New("github: no verified primary email found")
 }

@@ -33,8 +33,20 @@ function OAuthCallbackInner() {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((user: { id: string; email: string; role: string }) => {
-        login(token, { id: user.id, email: user.email, role: user.role ?? "user" });
+      .then((user: {
+        id: string;
+        email: string;
+        role: string;
+        display_name?: string | null;
+        avatar_url?: string | null;
+      }) => {
+        login(token, {
+          id: user.id,
+          email: user.email,
+          role: user.role ?? "user",
+          display_name: user.display_name,
+          avatar_url: user.avatar_url,
+        });
         router.replace("/tasks");
       })
       .catch(() => router.replace("/login?error=oauth"));

@@ -78,10 +78,22 @@ func run() error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
+	// S3 Client.
+	var s3Client *attachments.S3Client
+	if cfg.S3Bucket != "" {
+		s3Client, err = attachments.NewS3Client(
+			context.Background(),
+			cfg.AWSRegion, cfg.AWSAccessKeyID, cfg.AWSSecretAccessKey, cfg.S3Bucket,
+		)
+		if err != nil {
+			return fmt.Errorf("init s3 client: %w", err)
+		}
+	}
+
 	// Auth.
 	authRepo := auth.NewRepository(pool)
 	emailClient := emailpkg.New(cfg.ResendAPIKey, cfg.ResendFrom)
-	authSvc := auth.NewService(authRepo, cfg.JWTSecret, emailClient, cfg.FrontendURL)
+	authSvc := auth.NewService(authRepo, cfg.JWTSecret, emailClient, cfg.FrontendURL, s3Client)
 	authHandler := auth.NewHandler(authSvc)
 	oauthHandler := auth.NewOAuthHandler(
 		cfg.GoogleClientID, cfg.GoogleClientSecret,
@@ -125,16 +137,6 @@ func run() error {
 
 	// Attachments.
 	attachmentsRepo := attachments.NewRepository(pool)
-	var s3Client *attachments.S3Client
-	if cfg.S3Bucket != "" {
-		s3Client, err = attachments.NewS3Client(
-			context.Background(),
-			cfg.AWSRegion, cfg.AWSAccessKeyID, cfg.AWSSecretAccessKey, cfg.S3Bucket,
-		)
-		if err != nil {
-			return fmt.Errorf("init s3 client: %w", err)
-		}
-	}
 	attachmentsSvc := attachments.NewService(attachmentsRepo, s3Client)
 	attachmentsHandler := attachments.NewHandler(attachmentsSvc, tasksSvc, cfg.S3Bucket)
 
@@ -228,7 +230,7 @@ func run() error {
 
 	// Email-to-task inbound.
 	inboxRepo := inbox.NewRepository(pool)
-	inboxHandler := inbox.NewHandler(inboxRepo, tasksSvc)
+	inboxHandler := inbox.NewHandler(inboxRepo, tasksSvc, cfg.ResendAPIKey)
 
 	// Automations engine.
 	automationsRepo := automations.NewRepository(pool)
@@ -256,7 +258,7 @@ func run() error {
 
 	// Notes / Docs.
 	notesRepo := notes.NewRepository(pool)
-	notesSvc := notes.NewService(notesRepo, sseBroker)
+	notesSvc := notes.NewService(notesRepo, sseBroker, s3Client)
 	notesHandler := notes.NewHandler(notesSvc)
 
 	// Global search.

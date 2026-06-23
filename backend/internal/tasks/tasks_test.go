@@ -82,8 +82,8 @@ func toPgx5URL(u string) string {
 func createTestUser(t *testing.T, email string) string {
 	t.Helper()
 	repo := auth.NewRepository(testPool)
-	svc := auth.NewService(repo, "test-secret", nil, "")
-	err := svc.Signup(context.Background(), email, "password123")
+	svc := auth.NewService(repo, "test-secret", nil, "", nil)
+	err := svc.Signup(context.Background(), email, "password123", "Test User")
 	require.NoError(t, err)
 	user, err := repo.GetUserByEmail(context.Background(), email)
 	require.NoError(t, err)

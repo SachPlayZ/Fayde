@@ -17,6 +17,7 @@ type Storage interface {
 	Upload(ctx context.Context, key, contentType string, body io.Reader, size int64) error
 	Delete(ctx context.Context, key string) error
 	PresignURL(ctx context.Context, key string, expiry time.Duration) (string, error)
+	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
 }
 
 // S3Client wraps the AWS S3 client with convenience methods.
@@ -81,4 +82,20 @@ func (c *S3Client) PresignURL(ctx context.Context, key string, expiry time.Durat
 		return "", fmt.Errorf("attachments: presign url: %w", err)
 	}
 	return req.URL, nil
+}
+
+// Download retrieves an object from S3.
+func (c *S3Client) Download(ctx context.Context, key string) (io.ReadCloser, string, error) {
+	out, err := c.client.GetObject(ctx, &s3.GetObjectInput{
+		Bucket: aws.String(c.bucket),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("attachments: s3 get: %w", err)
+	}
+	contentType := ""
+	if out.ContentType != nil {
+		contentType = *out.ContentType
+	}
+	return out.Body, contentType, nil
 }

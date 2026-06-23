@@ -1,6 +1,7 @@
 package attachments_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -114,6 +115,16 @@ func (s *stubStorage) PresignURL(_ context.Context, key string, _ time.Duration)
 	return "https://stub.s3.example.com/" + key + "?presigned=1", nil
 }
 
+func (s *stubStorage) Download(_ context.Context, key string) (io.ReadCloser, string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, ok := s.objects[key]
+	if !ok {
+		return nil, "", fmt.Errorf("object not found")
+	}
+	return io.NopCloser(bytes.NewReader(data)), "image/png", nil
+}
+
 func (s *stubStorage) has(key string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -132,8 +143,8 @@ func (s *stubStorage) len() int {
 func createTestUser(t *testing.T, email string) string {
 	t.Helper()
 	repo := auth.NewRepository(testPool)
-	svc := auth.NewService(repo, "test-secret", nil, "")
-	err := svc.Signup(context.Background(), email, "password123")
+	svc := auth.NewService(repo, "test-secret", nil, "", nil)
+	err := svc.Signup(context.Background(), email, "password123", "Test User")
 	require.NoError(t, err)
 	user, err := repo.GetUserByEmail(context.Background(), email)
 	require.NoError(t, err)

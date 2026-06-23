@@ -158,8 +158,11 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
           )}
         </TableCell>
 
-        <TableCell>
-          <span className={cn("font-medium text-sm", titleClass)}>
+        <TableCell className="max-w-[200px] lg:max-w-[320px] xl:max-w-[400px]">
+          <span
+            className={cn("font-medium text-sm block truncate", titleClass)}
+            title={task.title}
+          >
             <Highlight text={task.title} query={search} />
           </span>
           <div className="flex items-center gap-2 mt-0.5">

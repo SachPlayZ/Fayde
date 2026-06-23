@@ -3,7 +3,10 @@ package notes
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/httputil"
@@ -151,4 +154,68 @@ func (h *Handler) ListByTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.JSON(w, http.StatusOK, refs)
+}
+
+// UploadImage handles POST /notes/images
+func (h *Handler) UploadImage(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20) // 10MB
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "file too large or invalid multipart form")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		httputil.Error(w, http.StatusBadRequest, "missing file field")
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	filename, err := h.svc.UploadImage(r.Context(), header.Filename, contentType, file, header.Size)
+	if err != nil {
+		if strings.Contains(err.Error(), "not configured") {
+			httputil.Error(w, http.StatusNotImplemented, "S3 storage not configured")
+			return
+		}
+		httputil.Error(w, http.StatusInternalServerError, "failed to upload image")
+		return
+	}
+
+	imageURL := fmt.Sprintf("/notes/images/%s", filename)
+	httputil.JSON(w, http.StatusCreated, map[string]string{"url": imageURL})
+}
+
+// GetImage handles GET /notes/images/{filename}
+func (h *Handler) GetImage(w http.ResponseWriter, r *http.Request) {
+	filename := chi.URLParam(r, "filename")
+	if filename == "" {
+		httputil.Error(w, http.StatusBadRequest, "missing filename")
+		return
+	}
+
+	s3Key := "notes/images/" + filename
+	body, contentType, err := h.svc.DownloadImage(r.Context(), s3Key)
+	if err != nil {
+		httputil.Error(w, http.StatusNotFound, "image not found")
+		return
+	}
+	defer body.Close()
+
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	_, _ = io.Copy(w, body)
 }

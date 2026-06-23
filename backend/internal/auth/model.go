@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"time"
 )
-
 // User represents an application user as stored in the database.
 type User struct {
 	ID            string          `json:"id"`
@@ -23,6 +22,8 @@ type User struct {
 	Provider      string          `json:"provider"`
 	ProviderID    *string         `json:"-"`
 	CreatedAt     time.Time       `json:"created_at"`
+	DisplayName   *string         `json:"display_name"`
+	AvatarURL     *string         `json:"avatar_url"`
 }
 
 // PublicUser is the subset of User safe to include in API responses.
@@ -36,6 +37,8 @@ type PublicUser struct {
 	ChatURL       *string         `json:"notif_chat_url"`
 	ChatKind      *string         `json:"notif_chat_kind"`
 	InboxToken    *string         `json:"inbox_token"`
+	DisplayName   *string         `json:"display_name"`
+	AvatarURL     *string         `json:"avatar_url"`
 }
 
 // authResponse is the response body for signup and login endpoints.

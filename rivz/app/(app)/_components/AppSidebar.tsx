@@ -60,7 +60,12 @@ const navSecondary = [
 ];
 
 type Props = {
-  user: { email: string; role: string } | null;
+  user: {
+    email: string;
+    role: string;
+    display_name?: string | null;
+    avatar_url?: string | null;
+  } | null;
   onActivityOpen: () => void;
   onLogout: () => void;
 };
@@ -70,7 +75,17 @@ export function AppSidebar({ user, onActivityOpen, onLogout }: Props) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
 
-  const initials = user?.email?.slice(0, 2).toUpperCase() ?? "??";
+  const initials = (() => {
+    if (!user) return "??";
+    if (user.display_name) {
+      const parts = user.display_name.trim().split(/\s+/);
+      const firstChars = parts.map(p => p[0]).filter(Boolean).join("");
+      if (firstChars.length > 0) {
+        return firstChars.slice(0, 2).toUpperCase();
+      }
+    }
+    return user.email.slice(0, 2).toUpperCase();
+  })();
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard" || pathname === "/";
@@ -258,13 +273,32 @@ export function AppSidebar({ user, onActivityOpen, onLogout }: Props) {
             }
           >
             <div className="flex items-center gap-2 min-w-0">
-              <div className="flex items-center justify-center size-6.5 rounded-full bg-gradient-to-tr from-sidebar-primary/20 to-sidebar-primary/10 text-sidebar-primary text-[10px] font-bold shrink-0 ring-1 ring-sidebar-primary/20">
-                {initials}
+              <div className="relative size-6.5 rounded-full overflow-hidden shrink-0 ring-1 ring-sidebar-primary/20 bg-gradient-to-tr from-sidebar-primary/20 to-sidebar-primary/10 flex items-center justify-center">
+                {user?.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={user.avatar_url}
+                    alt={user.display_name || user.email}
+                    className="size-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span className="text-sidebar-primary text-[10px] font-bold">
+                    {initials}
+                  </span>
+                )}
               </div>
               {!collapsed && (
-                <span className="text-xs text-sidebar-foreground/80 font-medium truncate max-w-28">
-                  {user?.email}
-                </span>
+                <div className="flex flex-col items-start min-w-0 leading-tight">
+                  <span className="text-xs text-sidebar-foreground/90 font-medium truncate max-w-28">
+                    {user?.display_name || user?.email}
+                  </span>
+                  {user?.display_name && (
+                    <span className="text-[10px] text-sidebar-foreground/50 truncate max-w-28">
+                      {user.email}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
             {!collapsed && (

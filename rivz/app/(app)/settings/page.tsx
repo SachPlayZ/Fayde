@@ -28,7 +28,8 @@ import {
   Plus,
   AlertTriangle,
 } from "lucide-react";
-import { Bell } from "lucide-react";
+import { Bell, User as UserIcon } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 import {
   Select,
   SelectTrigger,
@@ -1011,12 +1012,175 @@ function CalendarTab() {
   );
 }
 
+// ─── Profile Tab ─────────────────────────────────────────────────────────────
+
+function ProfileTab() {
+  const { data: me, isLoading, refetch } = useMe();
+  const updatePrefs = useUpdatePreferences();
+  const { refreshUser } = useAuth();
+  
+  const [displayName, setDisplayName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    if (me) {
+      setDisplayName(me.display_name ?? "");
+      setAvatarUrl(me.avatar_url ?? "");
+      setDirty(false);
+    }
+  }, [me]);
+
+  if (isLoading || !me) {
+    return <div className="mt-4 h-64 rounded-xl border border-border bg-card animate-pulse" />;
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Avatar image must be under 5MB");
+      return;
+    }
+
+    setUploading(true);
+    const body = new FormData();
+    body.append("file", file);
+
+    try {
+      const token = localStorage.getItem("token");
+      const apiURL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+      const res = await fetch(`${apiURL}/auth/me/avatar`, {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body,
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to upload avatar");
+      }
+
+      const data = await res.json();
+      const fullURL = `${apiURL}${data.avatar_url}`;
+      setAvatarUrl(fullURL);
+      await refreshUser();
+      refetch();
+      toast.success("Avatar image uploaded and updated successfully!");
+    } catch (err) {
+      toast.error("Failed to upload avatar image");
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSave = () => {
+    updatePrefs.mutate(
+      { display_name: displayName.trim(), avatar_url: avatarUrl.trim() || null },
+      {
+        onSuccess: async () => {
+          toast.success("Profile updated");
+          setDirty(false);
+          await refreshUser();
+          refetch();
+        },
+        onError: () => toast.error("Failed to update profile"),
+      }
+    );
+  };
+
+  return (
+    <div className="mt-4 flex flex-col gap-5">
+      <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
+        <h3 className="text-sm font-semibold">Profile Settings</h3>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          Update your public profile display name and avatar picture.
+        </p>
+
+        <div className="flex items-center gap-4 py-2">
+          <div className="relative size-16 rounded-full overflow-hidden bg-muted border border-border flex items-center justify-center">
+            {avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarUrl}
+                alt={displayName || "Preview"}
+                className="size-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="flex items-center justify-center size-full text-muted-foreground font-bold text-xl uppercase bg-gradient-to-tr from-sidebar-primary/20 to-sidebar-primary/10">
+                {(displayName || me.email || "??").slice(0, 2)}
+              </div>
+            )}
+          </div>
+          <div className="flex-1 flex flex-col gap-1.5">
+            <Label htmlFor="profile-avatar">Avatar Image URL</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="profile-avatar"
+                placeholder="https://example.com/avatar.jpg"
+                value={avatarUrl}
+                onChange={(e) => {
+                  setAvatarUrl(e.target.value);
+                  setDirty(true);
+                }}
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => document.getElementById("avatar-file-input")?.click()}
+                disabled={uploading}
+                className="shrink-0 text-xs"
+              >
+                {uploading ? "Uploading..." : "Upload File"}
+              </Button>
+              <input
+                id="avatar-file-input"
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="profile-name">Display Name</Label>
+          <Input
+            id="profile-name"
+            placeholder="John Doe"
+            value={displayName}
+            onChange={(e) => {
+              setDisplayName(e.target.value);
+              setDirty(true);
+            }}
+          />
+        </div>
+
+        <Button
+          onClick={handleSave}
+          disabled={!dirty || !displayName.trim() || updatePrefs.isPending}
+          className="w-fit"
+        >
+          {updatePrefs.isPending ? "Saving..." : "Save changes"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Settings Page ──────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const tab = searchParams.get("tab") ?? "notifications";
+  const tab = searchParams.get("tab") ?? "profile";
 
   return (
     <div className="flex flex-col gap-6">
@@ -1028,7 +1192,11 @@ export default function SettingsPage() {
       </div>
 
       <Tabs value={tab} onValueChange={(v) => router.replace(`/settings?tab=${v}`)}>
-        <TabsList className="bg-muted p-1 rounded-xl">
+        <TabsList className="bg-muted p-1 rounded-xl flex flex-wrap gap-1">
+          <TabsTrigger value="profile" className="rounded-lg text-xs">
+            <UserIcon className="size-3.5 mr-1.5" />
+            Profile
+          </TabsTrigger>
           <TabsTrigger value="notifications" className="rounded-lg text-xs">
             <Bell className="size-3.5 mr-1.5" />
             Notifications
@@ -1059,6 +1227,9 @@ export default function SettingsPage() {
           </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="profile">
+          <ProfileTab />
+        </TabsContent>
         <TabsContent value="notifications">
           <NotificationsTab />
         </TabsContent>

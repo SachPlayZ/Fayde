@@ -523,11 +523,11 @@ export function TasksPageClient() {
                         className="size-4 rounded border-input accent-primary cursor-pointer"
                       />
                     </TableHead>
-                    <TableHead>Title</TableHead>
+                    <TableHead className="max-w-[200px] lg:max-w-[320px] xl:max-w-[400px]">Title</TableHead>
                     <TableHead className="w-28">Status</TableHead>
-                    <TableHead className="w-28">Priority</TableHead>
+                    <TableHead className="w-24">Priority</TableHead>
                     <TableHead className="w-36">Due Date</TableHead>
-                    <TableHead className="w-28" />
+                    <TableHead className="w-36 text-right" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>

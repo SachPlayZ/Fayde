@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 
@@ -25,8 +26,9 @@ func NewHandler(svc *Service) *Handler {
 }
 
 type signupRequest struct {
-	Email    string `json:"email"    validate:"required,email"`
-	Password string `json:"password" validate:"required,min=8"`
+	Email       string `json:"email"        validate:"required,email"`
+	Password    string `json:"password"     validate:"required,min=8"`
+	DisplayName string `json:"display_name"  validate:"required"`
 }
 
 // Signup handles POST /auth/signup.
@@ -43,7 +45,7 @@ func (h *Handler) Signup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.Signup(r.Context(), strings.ToLower(req.Email), req.Password); err != nil {
+	if err := h.svc.Signup(r.Context(), strings.ToLower(req.Email), req.Password, req.DisplayName); err != nil {
 		if isDuplicateEmailError(err) {
 			httputil.Error(w, http.StatusConflict, "email already registered")
 			return
@@ -102,7 +104,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 
 	httputil.JSON(w, http.StatusOK, authResponse{
 		Token: result.Token,
-		User:  PublicUser{ID: result.User.ID, Email: result.User.Email, Role: result.User.Role},
+		User: PublicUser{
+			ID:          result.User.ID,
+			Email:       result.User.Email,
+			Role:        result.User.Role,
+			DisplayName: result.User.DisplayName,
+			AvatarURL:   result.User.AvatarURL,
+		},
 	})
 }
 
@@ -130,7 +138,13 @@ func (h *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 
 	httputil.JSON(w, http.StatusOK, authResponse{
 		Token: result.Token,
-		User:  PublicUser{ID: result.User.ID, Email: result.User.Email, Role: result.User.Role},
+		User: PublicUser{
+			ID:          result.User.ID,
+			Email:       result.User.Email,
+			Role:        result.User.Role,
+			DisplayName: result.User.DisplayName,
+			AvatarURL:   result.User.AvatarURL,
+		},
 	})
 }
 
@@ -169,7 +183,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		ID: user.ID, Email: user.Email, Role: user.Role,
 		Theme: user.Theme, DigestEnabled: user.DigestEnabled,
 		NotifPrefs: user.NotifPrefs, ChatURL: user.ChatURL, ChatKind: user.ChatKind,
-		InboxToken: user.InboxToken,
+		InboxToken: user.InboxToken, DisplayName: user.DisplayName, AvatarURL: user.AvatarURL,
 	})
 }
 
@@ -187,6 +201,8 @@ func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 		NotifPrefs    *json.RawMessage `json:"notif_prefs"`
 		ChatURL       *string          `json:"notif_chat_url"`
 		ChatKind      *string          `json:"notif_chat_kind"`
+		DisplayName   *string          `json:"display_name"`
+		AvatarURL     *string          `json:"avatar_url"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.Error(w, http.StatusBadRequest, "invalid body")
@@ -199,6 +215,8 @@ func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 		NotifPrefs:    body.NotifPrefs,
 		ChatURL:       body.ChatURL,
 		ChatKind:      body.ChatKind,
+		DisplayName:   body.DisplayName,
+		AvatarURL:     body.AvatarURL,
 	}
 	if err := h.svc.UpdatePreferences(r.Context(), userID, prefs); err != nil {
 		httputil.Error(w, http.StatusInternalServerError, "failed to update preferences")
@@ -220,4 +238,70 @@ func validationFields(errs validator.ValidationErrors) map[string]string {
 // violation on the email column (Postgres error code 23505).
 func isDuplicateEmailError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "23505")
+}
+
+// UploadAvatar handles POST /auth/me/avatar.
+func (h *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20) // 5MB limit
+	if err := r.ParseMultipartForm(5 << 20); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "file too large or invalid multipart form")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		httputil.Error(w, http.StatusBadRequest, "missing file field")
+		return
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	url, err := h.svc.UploadAvatar(r.Context(), userID, header.Filename, contentType, file, header.Size)
+	if err != nil {
+		if strings.Contains(err.Error(), "not configured") {
+			httputil.Error(w, http.StatusNotImplemented, "S3 storage not configured")
+			return
+		}
+		httputil.Error(w, http.StatusInternalServerError, "failed to upload avatar")
+		return
+	}
+
+	httputil.JSON(w, http.StatusOK, map[string]string{"avatar_url": url})
+}
+
+// GetAvatar handles GET /auth/avatar/{filename}.
+func (h *Handler) GetAvatar(w http.ResponseWriter, r *http.Request) {
+	// We extract the filename param from url.
+	// We map /auth/avatar/{filename} -> S3: avatars/{filename}
+	parts := strings.Split(r.URL.Path, "/auth/avatar/")
+	if len(parts) < 2 || parts[1] == "" {
+		httputil.Error(w, http.StatusBadRequest, "missing filename")
+		return
+	}
+	filename := parts[1]
+
+	s3Key := "avatars/" + filename
+	body, contentType, err := h.svc.DownloadAvatar(r.Context(), s3Key)
+	if err != nil {
+		httputil.Error(w, http.StatusNotFound, "avatar not found")
+		return
+	}
+	defer body.Close()
+
+	if contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	_, _ = io.Copy(w, body)
 }

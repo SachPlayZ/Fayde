@@ -4,6 +4,7 @@ package inbox
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"regexp"
@@ -34,10 +35,11 @@ func (r *Repository) UserIDByToken(ctx context.Context, token string) (string, e
 type Handler struct {
 	repo     *Repository
 	tasksSvc *tasks.Service
+	apiKey   string
 }
 
-func NewHandler(repo *Repository, tasksSvc *tasks.Service) *Handler {
-	return &Handler{repo: repo, tasksSvc: tasksSvc}
+func NewHandler(repo *Repository, tasksSvc *tasks.Service, apiKey string) *Handler {
+	return &Handler{repo: repo, tasksSvc: tasksSvc, apiKey: apiKey}
 }
 
 // inboundPayload is a permissive view of Resend's inbound email event.
@@ -46,10 +48,43 @@ type inboundPayload struct {
 	Subject string          `json:"subject"`
 	Text    string          `json:"text"`
 	Data    *struct {
+		EmailID string          `json:"email_id"`
 		To      json.RawMessage `json:"to"`
 		Subject string          `json:"subject"`
 		Text    string          `json:"text"`
 	} `json:"data"`
+}
+
+func fetchEmailBody(ctx context.Context, apiKey, emailID string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.resend.com/emails/receiving/"+emailID, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("resend returned status %d", resp.StatusCode)
+	}
+
+	var res struct {
+		Text string `json:"text"`
+		Html string `json:"html"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return "", err
+	}
+
+	if res.Text != "" {
+		return res.Text, nil
+	}
+	return res.Html, nil
 }
 
 // Webhook handles POST /webhooks/email (public). Always returns 200 so the
@@ -62,8 +97,16 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	to, subject, text := p.To, p.Subject, p.Text
+	emailID := ""
 	if p.Data != nil {
-		to, subject, text = p.Data.To, p.Data.Subject, p.Data.Text
+		to = p.Data.To
+		if p.Data.Subject != "" {
+			subject = p.Data.Subject
+		}
+		if p.Data.Text != "" {
+			text = p.Data.Text
+		}
+		emailID = p.Data.EmailID
 	}
 
 	token := extractToken(to)
@@ -76,6 +119,15 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 	if err != nil || userID == "" {
 		w.WriteHeader(http.StatusOK)
 		return
+	}
+
+	// Fetch body if we have emailID and apiKey
+	if emailID != "" && h.apiKey != "" {
+		if fetchedBody, err := fetchEmailBody(r.Context(), h.apiKey, emailID); err == nil && fetchedBody != "" {
+			text = fetchedBody
+		} else if err != nil {
+			log.Printf("inbox: failed to fetch email body: %v", err)
+		}
 	}
 
 	title := strings.TrimSpace(subject)

@@ -119,8 +119,10 @@ func New(
 	r.Get("/auth/google/callback", oauthHandler.GoogleCallback)
 	r.Get("/auth/github", oauthHandler.GitHubLogin)
 	r.Get("/auth/github/callback", oauthHandler.GitHubCallback)
+	r.Get("/auth/avatar/{filename}", authHandler.GetAvatar)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Get("/auth/me", authHandler.Me)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Patch("/auth/me/preferences", authHandler.UpdatePreferences)
+	r.With(auth.Authenticate(cfg.JWTSecret)).Post("/auth/me/avatar", authHandler.UploadAvatar)
 
 	// Google Calendar Sync Public/OAuth Flow Routes
 	r.Get("/calendar/connect", calendarSyncHandler.Connect)
@@ -134,6 +136,9 @@ func New(
 
 	// SSE.
 	r.Get("/events", sseHandler.ServeSSE)
+
+	// Note image proxy (public for rendering img tags).
+	r.Get("/notes/images/{filename}", notesHandler.GetImage)
 
 	// JWT-protected routes (also accept API tokens via dual middleware).
 	r.Group(func(r chi.Router) {
@@ -288,6 +293,7 @@ func New(
 		// Notes / Docs.
 		r.Get("/notes", notesHandler.List)
 		r.Post("/notes", notesHandler.Create)
+		r.Post("/notes/images", notesHandler.UploadImage)
 		r.Put("/notes/reorder", notesHandler.Reorder)
 		r.Get("/notes/{id}", notesHandler.Get)
 		r.Patch("/notes/{id}", notesHandler.Update)

@@ -46,7 +46,30 @@ export default function NoteEditor({ note }: { note: Note }) {
 
   // Recreate the editor when the selected note changes.
   const initialContent = useMemo(() => parseInitial(note.body), [note.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const editor = useCreateBlockNote({ initialContent }, [note.id]);
+  const editor = useCreateBlockNote({ 
+    initialContent,
+    uploadFile: async (file: File) => {
+      const body = new FormData();
+      body.append("file", file);
+
+      const token = localStorage.getItem("token");
+      const apiURL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+      const res = await fetch(`${apiURL}/notes/images`, {
+        method: "POST",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: body,
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to upload image");
+      }
+
+      const data = await res.json();
+      return `${apiURL}${data.url}`;
+    }
+  }, [note.id]);
 
   const scheduleSave = (patch: { title?: string; body?: string; plain?: string }) => {
     setSaving(true);

@@ -76,7 +76,7 @@ func toPgx5URL(u string) string {
 
 func newService() *auth.Service {
 	repo := auth.NewRepository(testPool)
-	return auth.NewService(repo, "test-secret-key-for-testing-only", nil, "http://localhost:3000")
+	return auth.NewService(repo, "test-secret-key-for-testing-only", nil, "http://localhost:3000", nil)
 }
 
 func TestSignupLoginFlow(t *testing.T) {
@@ -88,13 +88,15 @@ func TestSignupLoginFlow(t *testing.T) {
 	password := "securepassword123"
 
 	// Signup sends a verification email; in tests the email client is nil so it's skipped.
-	err := svc.Signup(ctx, email, password)
+	err := svc.Signup(ctx, email, password, "Test User")
 	require.NoError(t, err)
 
 	// User must exist in DB with the correct email.
 	user, err := repo.GetUserByEmail(ctx, email)
 	require.NoError(t, err)
 	assert.Equal(t, email, user.Email)
+	require.NotNil(t, user.DisplayName)
+	assert.Equal(t, "Test User", *user.DisplayName)
 
 	// Verify email so login is allowed (email client disabled in tests — create token via repo).
 	verifyToken, err := repo.CreateVerificationToken(ctx, user.ID)

@@ -3,21 +3,29 @@ package notes
 import (
 	"context"
 	"fmt"
+	"io"
 	"regexp"
 
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
+	"github.com/google/uuid"
 )
 
 // backlinkRe matches [[<uuid>]] references inside a note body.
 var backlinkRe = regexp.MustCompile(`\[\[([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\]\]`)
 
+type ImageStorage interface {
+	Upload(ctx context.Context, key, contentType string, body io.Reader, size int64) error
+	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
+}
+
 type Service struct {
 	repo      Repository
 	sseBroker *sse.Broker
+	s3Client  ImageStorage
 }
 
-func NewService(repo Repository, sseBroker *sse.Broker) *Service {
-	return &Service{repo: repo, sseBroker: sseBroker}
+func NewService(repo Repository, sseBroker *sse.Broker, s3Client ImageStorage) *Service {
+	return &Service{repo: repo, sseBroker: sseBroker, s3Client: s3Client}
 }
 
 func (s *Service) List(ctx context.Context, userID string) ([]*Note, error) {
@@ -102,4 +110,23 @@ func (s *Service) publish(userID, event string, payload any) {
 	if s.sseBroker != nil {
 		s.sseBroker.Publish(userID, sse.Event{Type: event, Payload: payload})
 	}
+}
+
+func (s *Service) UploadImage(ctx context.Context, filename, contentType string, body io.Reader, size int64) (string, error) {
+	if s.s3Client == nil {
+		return "", fmt.Errorf("S3 storage not configured")
+	}
+	uuidString := uuid.New().String()
+	key := fmt.Sprintf("notes/images/%s-%s", uuidString, filename)
+	if err := s.s3Client.Upload(ctx, key, contentType, body, size); err != nil {
+		return "", fmt.Errorf("notes: upload image: %w", err)
+	}
+	return fmt.Sprintf("%s-%s", uuidString, filename), nil
+}
+
+func (s *Service) DownloadImage(ctx context.Context, key string) (io.ReadCloser, string, error) {
+	if s.s3Client == nil {
+		return nil, "", fmt.Errorf("S3 storage not configured")
+	}
+	return s.s3Client.Download(ctx, key)
 }

@@ -14,13 +14,12 @@ import (
 
 // Repository defines persistence operations for users.
 type Repository interface {
-	CreateUser(ctx context.Context, email, passwordHash string) (*User, error)
+	CreateUser(ctx context.Context, email, passwordHash, displayName string) (*User, error)
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 	GetUserByID(ctx context.Context, id string) (*User, error)
 	UpdatePreferences(ctx context.Context, id string, prefs Preferences) error
 
-	UpsertOAuthUser(ctx context.Context, email, provider, providerID string) (*User, error)
-
+	UpsertOAuthUser(ctx context.Context, email, provider, providerID, displayName, avatarURL string) (*User, error)
 	CreateVerificationToken(ctx context.Context, userID string) (string, error)
 	ConsumeVerificationToken(ctx context.Context, token string) (string, error)
 	DeleteVerificationTokensForUser(ctx context.Context, userID string) error
@@ -40,7 +39,7 @@ const userSelect = `id, email, password_hash, role,
 	COALESCE(theme,'system'), COALESCE(digest_enabled,true),
 	COALESCE(notif_prefs,'{}'), notif_chat_url, notif_chat_kind, inbox_token,
 	COALESCE(email_verified,false), COALESCE(provider,'local'), provider_id,
-	created_at`
+	created_at, display_name, avatar_url`
 
 func scanUser(row pgx.Row) (*User, error) {
 	u := &User{}
@@ -49,7 +48,7 @@ func scanUser(row pgx.Row) (*User, error) {
 		&u.Theme, &u.DigestEnabled,
 		&u.NotifPrefs, &u.ChatURL, &u.ChatKind, &u.InboxToken,
 		&u.EmailVerified, &u.Provider, &u.ProviderID,
-		&u.CreatedAt,
+		&u.CreatedAt, &u.DisplayName, &u.AvatarURL,
 	)
 	if err != nil {
 		return nil, err
@@ -58,11 +57,15 @@ func scanUser(row pgx.Row) (*User, error) {
 }
 
 // CreateUser inserts a new local user and returns the created record.
-func (r *pgRepository) CreateUser(ctx context.Context, email, passwordHash string) (*User, error) {
-	const q = `INSERT INTO users (email, password_hash, email_verified, provider)
-		VALUES ($1, $2, false, 'local')
+func (r *pgRepository) CreateUser(ctx context.Context, email, passwordHash, displayName string) (*User, error) {
+	var dn *string
+	if displayName != "" {
+		dn = &displayName
+	}
+	const q = `INSERT INTO users (email, password_hash, email_verified, provider, display_name)
+		VALUES ($1, $2, false, 'local', $3)
 		RETURNING ` + userSelect
-	u, err := scanUser(r.pool.QueryRow(ctx, q, email, passwordHash))
+	u, err := scanUser(r.pool.QueryRow(ctx, q, email, passwordHash, dn))
 	if err != nil {
 		return nil, fmt.Errorf("auth: create user: %w", err)
 	}
@@ -119,6 +122,16 @@ func (r *pgRepository) UpdatePreferences(ctx context.Context, id string, prefs P
 		args = append(args, *prefs.ChatKind)
 		idx++
 	}
+	if prefs.DisplayName != nil {
+		sets = append(sets, fmt.Sprintf("display_name=$%d", idx))
+		args = append(args, *prefs.DisplayName)
+		idx++
+	}
+	if prefs.AvatarURL != nil {
+		sets = append(sets, fmt.Sprintf("avatar_url=$%d", idx))
+		args = append(args, *prefs.AvatarURL)
+		idx++
+	}
 	if len(sets) == 0 {
 		return nil
 	}
@@ -130,15 +143,25 @@ func (r *pgRepository) UpdatePreferences(ctx context.Context, id string, prefs P
 
 // UpsertOAuthUser inserts or updates an OAuth user by email.
 // If a user with that email already exists, their provider info is updated (merge).
-func (r *pgRepository) UpsertOAuthUser(ctx context.Context, email, provider, providerID string) (*User, error) {
-	const q = `INSERT INTO users (email, provider, provider_id, email_verified)
-		VALUES ($1, $2, $3, true)
+func (r *pgRepository) UpsertOAuthUser(ctx context.Context, email, provider, providerID, displayName, avatarURL string) (*User, error) {
+	var dn *string
+	if displayName != "" {
+		dn = &displayName
+	}
+	var av *string
+	if avatarURL != "" {
+		av = &avatarURL
+	}
+	const q = `INSERT INTO users (email, provider, provider_id, email_verified, display_name, avatar_url)
+		VALUES ($1, $2, $3, true, $4, $5)
 		ON CONFLICT (email) DO UPDATE
 		  SET provider    = EXCLUDED.provider,
 		      provider_id = EXCLUDED.provider_id,
-		      email_verified = true
+		      email_verified = true,
+		      display_name = COALESCE(users.display_name, EXCLUDED.display_name),
+		      avatar_url = COALESCE(users.avatar_url, EXCLUDED.avatar_url)
 		RETURNING ` + userSelect
-	u, err := scanUser(r.pool.QueryRow(ctx, q, email, provider, providerID))
+	u, err := scanUser(r.pool.QueryRow(ctx, q, email, provider, providerID, dn, av))
 	if err != nil {
 		return nil, fmt.Errorf("auth: upsert oauth user: %w", err)
 	}

@@ -19,6 +19,8 @@ export type Me = {
   notif_chat_url: string | null;
   notif_chat_kind: string | null;
   inbox_token: string | null;
+  display_name: string | null;
+  avatar_url: string | null;
 };
 
 const DEFAULT_PREFS: NotifPrefs = {
@@ -45,6 +47,8 @@ export type PreferencesPatch = {
   notif_prefs?: NotifPrefs;
   notif_chat_url?: string;
   notif_chat_kind?: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
 };
 
 export function useUpdatePreferences() {

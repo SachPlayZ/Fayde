@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"time"
 
 	emailpkg "github.com/SachPlayZ/rivz-asn/backend/internal/email"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -15,33 +17,40 @@ const (
 	tokenExpiry = 72 * time.Hour
 )
 
+type AvatarStorage interface {
+	Upload(ctx context.Context, key, contentType string, body io.Reader, size int64) error
+	Download(ctx context.Context, key string) (io.ReadCloser, string, error)
+}
+
 // Service handles business logic for user authentication.
 type Service struct {
 	repo        Repository
 	jwtSecret   string
 	emailClient *emailpkg.Client
 	frontendURL string
+	s3Client    AvatarStorage
 }
 
 // NewService creates a new auth Service.
-func NewService(repo Repository, jwtSecret string, emailClient *emailpkg.Client, frontendURL string) *Service {
+func NewService(repo Repository, jwtSecret string, emailClient *emailpkg.Client, frontendURL string, s3Client AvatarStorage) *Service {
 	return &Service{
 		repo:        repo,
 		jwtSecret:   jwtSecret,
 		emailClient: emailClient,
 		frontendURL: frontendURL,
+		s3Client:    s3Client,
 	}
 }
 
 // Signup creates a new local user, sends a verification email, and returns no token.
 // The user must verify their email before they can log in.
-func (s *Service) Signup(ctx context.Context, email, password string) error {
+func (s *Service) Signup(ctx context.Context, email, password, displayName string) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
 		return fmt.Errorf("auth: hash password: %w", err)
 	}
 
-	user, err := s.repo.CreateUser(ctx, email, string(hash))
+	user, err := s.repo.CreateUser(ctx, email, string(hash), displayName)
 	if err != nil {
 		return err
 	}
@@ -159,9 +168,39 @@ type Preferences struct {
 	NotifPrefs    *json.RawMessage
 	ChatURL       *string
 	ChatKind      *string
+	DisplayName   *string
+	AvatarURL     *string
 }
 
 // UpdatePreferences updates user preferences.
 func (s *Service) UpdatePreferences(ctx context.Context, id string, prefs Preferences) error {
 	return s.repo.UpdatePreferences(ctx, id, prefs)
+}
+
+func (s *Service) UploadAvatar(ctx context.Context, id, filename, contentType string, body io.Reader, size int64) (string, error) {
+	if s.s3Client == nil {
+		return "", fmt.Errorf("S3 storage not configured")
+	}
+	uuidString := uuid.New().String()
+	key := fmt.Sprintf("avatars/%s-%s", uuidString, filename)
+	if err := s.s3Client.Upload(ctx, key, contentType, body, size); err != nil {
+		return "", fmt.Errorf("auth: upload avatar to S3: %w", err)
+	}
+
+	avatarURL := fmt.Sprintf("/auth/avatar/%s-%s", uuidString, filename)
+	prefs := Preferences{
+		AvatarURL: &avatarURL,
+	}
+	if err := s.repo.UpdatePreferences(ctx, id, prefs); err != nil {
+		return "", fmt.Errorf("auth: update avatar preference: %w", err)
+	}
+
+	return avatarURL, nil
+}
+
+func (s *Service) DownloadAvatar(ctx context.Context, key string) (io.ReadCloser, string, error) {
+	if s.s3Client == nil {
+		return nil, "", fmt.Errorf("S3 storage not configured")
+	}
+	return s.s3Client.Download(ctx, key)
 }

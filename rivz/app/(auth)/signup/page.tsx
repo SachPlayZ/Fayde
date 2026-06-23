@@ -104,6 +104,22 @@ export default function SignupPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
+              <Label htmlFor="display_name">Display Name</Label>
+              <Input
+                id="display_name"
+                placeholder="John Doe"
+                autoComplete="name"
+                aria-invalid={!!errors.display_name}
+                {...register("display_name")}
+              />
+              {errors.display_name && (
+                <p className="text-xs text-destructive animate-in fade-in-0 slide-in-from-top-1 duration-200">
+                  {errors.display_name.message}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"

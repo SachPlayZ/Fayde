@@ -65,11 +65,23 @@ function LoginInner() {
   const onSubmit = async (data: LoginInput) => {
     setUnverifiedEmail(null);
     try {
-      const res = await api.post<{ token: string; user: { id: string; email: string; role: string } }>(
-        "/auth/login",
-        data
-      );
-      login(res.token, { ...res.user, role: res.user.role ?? "user" });
+      const res = await api.post<{
+        token: string;
+        user: {
+          id: string;
+          email: string;
+          role: string;
+          display_name?: string | null;
+          avatar_url?: string | null;
+        };
+      }>("/auth/login", data);
+      login(res.token, {
+        id: res.user.id,
+        email: res.user.email,
+        role: res.user.role ?? "user",
+        display_name: res.user.display_name,
+        avatar_url: res.user.avatar_url,
+      });
       router.replace("/tasks");
     } catch (err) {
       if (err instanceof ApiError) {
