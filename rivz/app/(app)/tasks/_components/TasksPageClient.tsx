@@ -70,6 +70,9 @@ export function TasksPageClient() {
   const [calendarRange, setCalendarRange] = useState<{ from: string; to: string }>(
     () => getCalendarRange(new Date())
   );
+  const handleCalendarRangeChange = useCallback((from: string, to: string) => {
+    setCalendarRange(prev => prev.from === from && prev.to === to ? prev : { from, to });
+  }, []);
 
   const status = searchParams.get("status") ?? "";
   const search = searchParams.get("search") ?? "";
@@ -518,7 +521,7 @@ export function TasksPageClient() {
               setNewTaskDate(date);
               setNewTaskOpen(true);
             }}
-            onRangeChange={(from, to) => setCalendarRange({ from, to })}
+            onRangeChange={handleCalendarRangeChange}
           />
         ) : (
           <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500">
