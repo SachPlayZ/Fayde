@@ -31,6 +31,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
@@ -72,7 +73,7 @@ type Props = {
 
 export function AppSidebar({ user, onActivityOpen, onLogout }: Props) {
   const pathname = usePathname();
-  const { state } = useSidebar();
+  const { state, toggleSidebar } = useSidebar();
   const collapsed = state === "collapsed";
 
   const initials = (() => {
@@ -99,30 +100,47 @@ export function AppSidebar({ user, onActivityOpen, onLogout }: Props) {
       className="bg-sidebar/85 backdrop-blur-md border-r border-sidebar-border/30 shadow-xs transition-all duration-300"
     >
       {/* Brand */}
-      <SidebarHeader className="py-4 px-3">
-        <Link
-          href="/dashboard"
-          className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition-all duration-300 hover:bg-sidebar-accent/50 group"
-        >
-          <div className="relative size-7 rounded-lg overflow-hidden shrink-0 shadow-md ring-1 ring-sidebar-border/50 group-hover:ring-sidebar-primary/30 group-hover:rotate-6 transition-all duration-300">
+      <SidebarHeader className={cn("py-4 flex flex-row items-center gap-1.5", collapsed ? "px-2 justify-center" : "px-3 justify-between")}>
+        {collapsed ? (
+          <Button
+            variant="ghost"
+            onClick={toggleSidebar}
+            className="relative size-8 rounded-lg overflow-hidden p-0 shadow-md ring-1 ring-sidebar-border/50 hover:ring-sidebar-primary/30 transition-all duration-300 hover:bg-sidebar-accent/50 shrink-0 flex items-center justify-center"
+          >
             <Image
               src="/logo.png"
               alt="Fayde"
-              width={28}
-              height={28}
-              className="size-full object-cover"
+              width={24}
+              height={24}
+              className="object-cover"
               priority
             />
-          </div>
-          <span
-            className={cn(
-              "font-semibold text-sm tracking-tight text-sidebar-foreground/90 transition-all duration-300 overflow-hidden whitespace-nowrap group-hover:text-sidebar-foreground",
-              collapsed ? "w-0 opacity-0" : "w-auto opacity-100"
-            )}
-          >
-            Fayde
-          </span>
-        </Link>
+          </Button>
+        ) : (
+          <>
+            <Link
+              href="/dashboard"
+              className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition-all duration-300 hover:bg-sidebar-accent/50 group min-w-0 flex-1"
+            >
+              <div className="relative size-7 rounded-lg overflow-hidden shrink-0 shadow-md ring-1 ring-sidebar-border/50 group-hover:ring-sidebar-primary/30 group-hover:rotate-6 transition-all duration-300">
+                <Image
+                  src="/logo.png"
+                  alt="Fayde"
+                  width={28}
+                  height={28}
+                  className="size-full object-cover"
+                  priority
+                />
+              </div>
+              <span className="font-semibold text-sm tracking-tight text-sidebar-foreground/90 transition-all duration-300 group-hover:text-sidebar-foreground">
+                Fayde
+              </span>
+            </Link>
+            <SidebarTrigger
+              className="text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 size-8 rounded-lg transition-all duration-200 ease-out active:scale-95 shrink-0"
+            />
+          </>
+        )}
       </SidebarHeader>
 
       <SidebarSeparator className="opacity-50" />

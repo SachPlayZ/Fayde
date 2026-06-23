@@ -8,8 +8,7 @@ import { CommandPaletteProvider } from "@/components/CommandPalette";
 import { QuickCaptureProvider } from "@/lib/quick-capture-context";
 import { QuickCaptureDialog } from "@/components/QuickCaptureDialog";
 import { PomodoroTimer } from "@/components/PomodoroTimer";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Separator } from "@/components/ui/separator";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { PageTracker } from "@/components/PageTracker";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -47,13 +46,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onLogout={logout}
       />
       <SidebarInset>
-        {/* Minimal top bar */}
-        <header className="sticky top-0 z-40 flex h-12 items-center gap-2 border-b border-border bg-background/80 backdrop-blur-md px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator orientation="vertical" className="h-4" />
-          <div className="flex-1" />
-        </header>
-
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 py-8 animate-in fade-in-0 slide-in-from-bottom-3 duration-400">
           {children}
         </main>
