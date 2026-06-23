@@ -35,20 +35,20 @@ export const metadata: Metadata = {
     siteName: "Fayde",
     images: [
       {
-        url: "/logo.png",
-        width: 512,
-        height: 512,
-        alt: "Fayde Logo",
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "Fayde — your personal productivity suite",
       },
     ],
     locale: "en_US",
     type: "website",
   },
   twitter: {
-    card: "summary", // Displays a square card with the logo. Change to 'summary_large_image' if you add a wide 1200x630 banner
+    card: "summary_large_image",
     title: "Fayde",
     description: "Fayde — your personal productivity suite",
-    images: ["/logo.png"],
+    images: ["/og-image.png"],
   },
 };
 
