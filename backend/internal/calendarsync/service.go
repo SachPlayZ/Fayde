@@ -41,7 +41,7 @@ func NewService(
 		ClientSecret: googleClientSecret,
 		RedirectURL:  appURL + "/calendar/callback",
 		Scopes: []string{
-			"https://www.googleapis.com/auth/calendar.events",
+			"https://www.googleapis.com/auth/calendar",
 			"https://www.googleapis.com/auth/userinfo.email",
 		},
 		Endpoint: google.Endpoint,
