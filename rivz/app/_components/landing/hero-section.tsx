@@ -11,7 +11,7 @@ const words = [
 ];
 
 const angles = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
-const waves = [0, 1, 2];
+const waves = [0, 1, 2, 3, 4];
 
 export function HeroSection() {
   const reduce = useReducedMotion();
@@ -90,7 +90,7 @@ export function HeroSection() {
           </div>
         </div>
 
-        {/* Right Column: Logo with Reverberating Dots Animation */}
+        {/* Right Column: Logo with Radial Ripple Dots Animation */}
         <div className="relative flex-shrink-0 w-full max-w-[380px] sm:max-w-[450px] aspect-square flex items-center justify-center select-none overflow-visible">
           {/* Pulsing Background Glow */}
           <motion.div
@@ -103,24 +103,24 @@ export function HeroSection() {
               repeat: Infinity,
               ease: "easeInOut",
             }}
-            className="absolute size-[240px] rounded-full bg-white/5 blur-3xl"
+            className="absolute size-[280px] rounded-full bg-white/5 blur-3xl"
           />
 
-          {/* Concentric waves and radiating dots */}
+          {/* Staggered radial waves */}
           {!reduce &&
             waves.map((waveIndex) => {
-              const delay = waveIndex * 1.3;
+              const delay = waveIndex * 0.8;
               return (
                 <div key={waveIndex} className="absolute inset-0 flex items-center justify-center">
                   {/* Expanding Dashed Ring */}
                   <motion.div
-                    initial={{ scale: 0.4, opacity: 0 }}
+                    initial={{ scale: 0.2, opacity: 0 }}
                     animate={{
-                      scale: [0.4, 1.6, 2.6],
-                      opacity: [0, 0.35, 0],
+                      scale: [0.2, 1.8, 3.2],
+                      opacity: [0, 0.3, 0],
                     }}
                     transition={{
-                      duration: 3.9,
+                      duration: 4.0,
                       repeat: Infinity,
                       delay: delay,
                       ease: "easeOut",
@@ -128,22 +128,22 @@ export function HeroSection() {
                     className="absolute size-[160px] rounded-full border border-dashed border-white/20 pointer-events-none"
                   />
 
-                  {/* Radiating Angle Dots */}
+                  {/* Radiating Angle Dots originating from center */}
                   {angles.map((angle) => {
                     const x = Math.cos((angle * Math.PI) / 180);
                     const y = Math.sin((angle * Math.PI) / 180);
                     return (
                       <motion.div
                         key={angle}
-                        initial={{ x: x * 50, y: y * 50, opacity: 0, scale: 0.4 }}
+                        initial={{ x: x * 15, y: y * 15, opacity: 0, scale: 0.3 }}
                         animate={{
-                          x: x * 210,
-                          y: y * 210,
-                          opacity: [0, 0.7, 0.7, 0],
-                          scale: [0.4, 0.9, 0.6, 0.2],
+                          x: x * 260,
+                          y: y * 260,
+                          opacity: [0, 0.8, 0.8, 0],
+                          scale: [0.3, 1, 0.6, 0.1],
                         }}
                         transition={{
-                          duration: 3.9,
+                          duration: 4.0,
                           repeat: Infinity,
                           delay: delay,
                           ease: "easeOut",
@@ -156,7 +156,7 @@ export function HeroSection() {
               );
             })}
 
-          {/* Floating Logo Container */}
+          {/* Floating Logo Container (Enlarged) */}
           <motion.div
             initial={reduce ? false : { opacity: 0, scale: 0.8 }}
             animate={
@@ -177,14 +177,14 @@ export function HeroSection() {
                 ease: "easeInOut",
               },
             }}
-            className="relative z-10 size-36 sm:size-44 rounded-[2.5rem] bg-zinc-950/80 border border-white/10 p-5 shadow-[0_0_50px_rgba(0,0,0,0.8),_0_0_30px_rgba(255,255,255,0.03)] flex items-center justify-center backdrop-blur-xl"
+            className="relative z-10 size-44 sm:size-56 rounded-[3rem] bg-zinc-950/80 border border-white/10 p-6 sm:p-8 shadow-[0_0_50px_rgba(0,0,0,0.8),_0_0_30px_rgba(255,255,255,0.03)] flex items-center justify-center backdrop-blur-xl"
           >
             <Image
               src="/logo.png"
               alt="Fayde Logo"
-              width={176}
-              height={176}
-              className="size-full object-contain rounded-[1.8rem] select-none"
+              width={224}
+              height={224}
+              className="size-full object-contain rounded-[2.2rem] select-none"
               priority
             />
           </motion.div>

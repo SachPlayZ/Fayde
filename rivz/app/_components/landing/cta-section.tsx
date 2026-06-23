@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, useReducedMotion } from "motion/react";
 
 export function CtaSection() {
@@ -34,7 +35,19 @@ export function CtaSection() {
 
       <footer className="border-t border-white/[0.05] px-6 md:px-12 lg:px-24 py-12">
         <div className="max-w-[1400px] mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <p className="text-white font-bold text-lg tracking-tight">Fayde</p>
+          <Link
+            href="/"
+            className="text-white font-bold text-lg tracking-tight flex items-center gap-2.5 group"
+          >
+            <Image
+              src="/logo.png"
+              alt="Fayde"
+              width={24}
+              height={24}
+              className="size-6 rounded-md object-contain transition-transform duration-300 group-hover:scale-105"
+            />
+            <span className="group-hover:text-zinc-200 transition-colors duration-200">Fayde</span>
+          </Link>
           <div className="flex items-center gap-8">
             <Link href="/login" className="text-zinc-600 hover:text-zinc-400 text-sm transition-colors duration-200">
               Sign in

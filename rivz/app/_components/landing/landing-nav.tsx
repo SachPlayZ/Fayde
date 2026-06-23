@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import Image from "next/image";
 import { motion, useScroll, useTransform } from "motion/react";
 
 export function LandingNav() {
@@ -15,9 +16,16 @@ export function LandingNav() {
       <nav className="relative max-w-[1400px] mx-auto px-6 md:px-12 h-16 flex items-center justify-between">
         <Link
           href="/"
-          className="font-bold text-white text-lg tracking-tight select-none"
+          className="font-bold text-white text-lg tracking-tight select-none flex items-center gap-2.5 group"
         >
-          Fayde
+          <Image
+            src="/logo.png"
+            alt="Fayde"
+            width={24}
+            height={24}
+            className="size-6 rounded-md object-contain transition-transform duration-300 group-hover:scale-105"
+          />
+          <span className="group-hover:text-zinc-200 transition-colors duration-200">Fayde</span>
         </Link>
         <div className="flex items-center gap-6">
           <Link
