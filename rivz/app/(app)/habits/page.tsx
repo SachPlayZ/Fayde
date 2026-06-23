@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { format, subDays, eachDayOfInterval } from "date-fns";
+import { format, subDays, eachDayOfInterval, isToday } from "date-fns";
 import {
   useHabits,
   useCreateHabit,
@@ -12,16 +12,47 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Flame, Plus, Trash2, Target } from "lucide-react";
+import { Check, Flame, Plus, Trash2, Target } from "lucide-react";
 import { toast } from "sonner";
 
 const COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#a855f7", "#ec4899"];
 
+const today = new Date();
+const DAYS = eachDayOfInterval({ start: subDays(today, 6), end: today });
+
+function DayHeaders() {
+  return (
+    <div className="flex items-center gap-4 px-5 py-2 border-b border-border bg-muted/30">
+      <div className="min-w-0 flex-1" />
+      <div className="flex items-center gap-1.5">
+        {DAYS.map((d) => {
+          const tod = isToday(d);
+          return (
+            <div
+              key={format(d, "yyyy-MM-dd")}
+              className={cn(
+                "size-7 flex flex-col items-center justify-center gap-px",
+                tod ? "text-primary" : "text-muted-foreground"
+              )}
+            >
+              <span className={cn("text-[9px] uppercase font-medium leading-none", tod && "font-bold")}>
+                {format(d, "EEEEE")}
+              </span>
+              <span className={cn("text-[10px] leading-none", tod && "font-bold underline underline-offset-2")}>
+                {format(d, "d")}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="size-8 shrink-0" />
+    </div>
+  );
+}
+
 function HabitRow({ habit }: { habit: Habit }) {
   const toggle = useToggleHabit();
   const del = useDeleteHabit();
-  const today = new Date();
-  const days = eachDayOfInterval({ start: subDays(today, 6), end: today });
   const from = format(subDays(today, 6), "yyyy-MM-dd");
   const to = format(today, "yyyy-MM-dd");
   const { data: logs } = useHabitLogs(habit.id, from, to);
@@ -45,21 +76,26 @@ function HabitRow({ habit }: { habit: Habit }) {
       </div>
 
       <div className="flex items-center gap-1.5">
-        {days.map((d) => {
+        {DAYS.map((d) => {
           const key = format(d, "yyyy-MM-dd");
           const done = doneSet.has(key);
+          const tod = isToday(d);
           return (
             <button
               key={key}
-              title={format(d, "EEE d")}
+              title={done ? `${format(d, "EEE d")} — done (click to undo)` : `${format(d, "EEE d")} — click to mark done`}
               onClick={() => toggle.mutate({ id: habit.id, date: key })}
               className={cn(
-                "size-7 rounded-md border text-[10px] flex items-center justify-center transition-all",
-                done ? "border-transparent text-white" : "border-border hover:border-foreground/40 text-muted-foreground"
+                "size-7 rounded-md flex items-center justify-center transition-all duration-150",
+                done
+                  ? "text-white shadow-sm"
+                  : tod
+                  ? "border-2 border-dashed border-muted-foreground/50 hover:border-foreground/60 hover:bg-muted/60 text-muted-foreground"
+                  : "border border-border hover:border-foreground/30 hover:bg-muted/40 text-muted-foreground/40"
               )}
               style={done ? { background: color } : undefined}
             >
-              {format(d, "EEEEE")}
+              {done ? <Check className="size-3.5 stroke-[3]" /> : null}
             </button>
           );
         })}
@@ -68,7 +104,7 @@ function HabitRow({ habit }: { habit: Habit }) {
       <Button
         size="icon"
         variant="ghost"
-        className="size-8 text-muted-foreground hover:text-destructive"
+        className="size-8 text-muted-foreground hover:text-destructive shrink-0"
         onClick={() =>
           del.mutate(habit.id, { onSuccess: () => toast.success("Habit deleted") })
         }
@@ -103,7 +139,7 @@ export default function HabitsPage() {
       <div>
         <h2 className="text-xl font-bold tracking-tight">Habits</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Build streaks. Tap a day to mark it done.
+          Click any day to mark it done. Click again to undo.
         </p>
       </div>
 
@@ -145,10 +181,13 @@ export default function HabitsPage() {
           <p className="text-sm">No habits yet. Add one above.</p>
         </div>
       ) : (
-        <div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
-          {habits!.map((h) => (
-            <HabitRow key={h.id} habit={h} />
-          ))}
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <DayHeaders />
+          <div className="divide-y divide-border">
+            {habits!.map((h) => (
+              <HabitRow key={h.id} habit={h} />
+            ))}
+          </div>
         </div>
       )}
     </div>

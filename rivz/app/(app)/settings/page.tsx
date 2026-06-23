@@ -1,5 +1,6 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -237,6 +238,15 @@ function TwoFATab() {
   const [disableOpen, setDisableOpen] = useState(false);
   const [setupData, setSetupData] = useState<TOTPSetup | null>(null);
   const [code, setCode] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!setupData?.qr_url) { setQrDataUrl(null); return; }
+    import("qrcode").then((QRCode) =>
+      QRCode.toDataURL(setupData.qr_url, { width: 192, margin: 2 })
+        .then(setQrDataUrl)
+    );
+  }, [setupData?.qr_url]);
 
   const enabled = status?.enabled ?? false;
 
@@ -343,12 +353,16 @@ function TwoFATab() {
               ) : (
                 <>
                   <div className="flex flex-col items-center gap-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={setupData.qr_url}
-                      alt="2FA QR code"
-                      className="w-48 h-48 rounded-xl border border-border bg-white p-2"
-                    />
+                    {qrDataUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={qrDataUrl}
+                        alt="2FA QR code"
+                        className="w-48 h-48 rounded-xl border border-border bg-white p-2"
+                      />
+                    ) : (
+                      <div className="w-48 h-48 rounded-xl border border-border bg-muted animate-pulse" />
+                    )}
                     <div className="flex flex-col items-center gap-1">
                       <p className="text-xs text-muted-foreground">Or enter manually:</p>
                       <code className="rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-mono tracking-widest">
@@ -905,8 +919,29 @@ function NotificationsTab() {
 // ─── Calendar Tab ────────────────────────────────────────────────────────────
 
 function CalendarTab() {
-  const { data: status, isLoading } = useCalendarStatus();
+  const { data: status, isLoading, refetch } = useCalendarStatus();
   const disconnect = useDisconnectCalendar();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const error = searchParams.get("error");
+    if (success === "true") {
+      refetch();
+      toast.success("Google Calendar connected!");
+      const p = new URLSearchParams(searchParams.toString());
+      p.delete("success");
+      p.delete("tab");
+      router.replace("/settings?tab=calendar");
+    } else if (error) {
+      toast.error(`Calendar connection failed: ${error}`);
+      const p = new URLSearchParams(searchParams.toString());
+      p.delete("error");
+      router.replace("/settings?tab=calendar");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleConnect = () => {
     const token = localStorage.getItem("token");
@@ -975,6 +1010,10 @@ function CalendarTab() {
 // ─── Settings Page ──────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tab = searchParams.get("tab") ?? "notifications";
+
   return (
     <div className="flex flex-col gap-6">
       <div className="animate-in fade-in-0 slide-in-from-bottom-3 duration-400">
@@ -984,7 +1023,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <Tabs defaultValue="notifications">
+      <Tabs value={tab} onValueChange={(v) => router.replace(`/settings?tab=${v}`)}>
         <TabsList className="bg-muted p-1 rounded-xl">
           <TabsTrigger value="notifications" className="rounded-lg text-xs">
             <Bell className="size-3.5 mr-1.5" />
