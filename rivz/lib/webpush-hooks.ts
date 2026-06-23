@@ -110,10 +110,21 @@ export function useEnablePush() {
       // Clear any stale subscription (different VAPID key from a previous deploy/session).
       const existing = await reg.pushManager.getSubscription();
       if (existing) await existing.unsubscribe();
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(public_key),
-      });
+      let sub: PushSubscription;
+      try {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(public_key),
+        });
+      } catch {
+        const isBrave = navigator.userAgent.includes("Brave") ||
+          // @ts-expect-error brave property
+          (navigator.brave && await navigator.brave.isBrave().catch(() => false));
+        if (isBrave) {
+          throw new Error("Brave browser blocks push notifications. Try Chrome or Firefox.");
+        }
+        throw new Error("Browser couldn't register for push — check notification permissions in browser settings.");
+      }
       const json = sub.toJSON();
       await api.post<void>("/push/subscribe", {
         endpoint: json.endpoint,
