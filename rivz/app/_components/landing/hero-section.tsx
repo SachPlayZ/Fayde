@@ -1,7 +1,8 @@
 "use client";
 import Link from "next/link";
 import Image from "next/image";
-import { motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion, useAnimate } from "motion/react";
+import { useEffect } from "react";
 
 const words = [
   { text: "Think", muted: false },
@@ -15,6 +16,47 @@ const RING_DURATION = 4.5;
 
 export function HeroSection() {
   const reduce = useReducedMotion();
+  const [scope, animate] = useAnimate();
+
+  useEffect(() => {
+    if (!scope.current) return;
+    let live = true;
+
+    async function run() {
+      if (reduce) {
+        animate(scope.current, { opacity: 1, y: 0 }, { duration: 0 });
+        if (live) {
+          animate(scope.current, { y: [-6, 6, -6] }, {
+            duration: 6, repeat: Infinity, ease: [0.45, 0, 0.55, 1],
+          });
+        }
+        return;
+      }
+
+      // Phase 1: flat on ground (diagonal) → rise up like a 3D badge
+      await animate(scope.current, {
+        rotateX: [76, 8, 0],
+        rotateY: [12, 3, 0],
+        rotateZ: [-20, -4, 0],
+        y: [110, -14, 0],
+        opacity: [0, 1, 1],
+        scale: [0.72, 1.07, 1],
+      }, {
+        duration: 1.7,
+        ease: [0.16, 1, 0.3, 1],
+      });
+
+      // Phase 2: gentle float loop
+      if (live) {
+        animate(scope.current, { y: [-8, 8, -8] }, {
+          duration: 6, repeat: Infinity, ease: [0.45, 0, 0.55, 1],
+        });
+      }
+    }
+
+    run();
+    return () => { live = false; };
+  }, [reduce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <section
@@ -91,9 +133,11 @@ export function HeroSection() {
         </div>
 
         {/* Right Column: Logo */}
-        <div className="relative flex-shrink-0 w-full max-w-[380px] sm:max-w-[450px] aspect-square flex items-center justify-center select-none overflow-visible">
-
-          {/* Layered ambient glow — two breathing radial gradients */}
+        <div
+          className="relative flex-shrink-0 w-full max-w-[380px] sm:max-w-[450px] aspect-square flex items-center justify-center select-none overflow-visible"
+          style={{ perspective: "1200px" }}
+        >
+          {/* Layered ambient glow */}
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             <motion.div
               animate={{ scale: [1, 1.18, 1], opacity: [0.7, 1, 0.7] }}
@@ -109,7 +153,7 @@ export function HeroSection() {
             />
           </div>
 
-          {/* Clean concentric ring pulses */}
+          {/* Concentric ring pulses */}
           {!reduce &&
             Array.from({ length: RING_COUNT }).map((_, i) => (
               <div key={i} className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -128,7 +172,7 @@ export function HeroSection() {
               </div>
             ))}
 
-          {/* Slow-rotating arc — outer orbital */}
+          {/* Outer orbital */}
           {!reduce && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <motion.div
@@ -146,7 +190,7 @@ export function HeroSection() {
             </div>
           )}
 
-          {/* Counter-rotating arc — inner orbital */}
+          {/* Inner orbital */}
           {!reduce && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
               <motion.div
@@ -164,19 +208,10 @@ export function HeroSection() {
             </div>
           )}
 
-          {/* Floating Logo Container */}
+          {/* Logo — 3D badge rising from ground */}
           <motion.div
-            initial={reduce ? false : { opacity: 0, scale: 0.8 }}
-            animate={
-              reduce
-                ? { y: [-6, 6, -6] }
-                : { opacity: 1, scale: 1, y: [-8, 8, -8] }
-            }
-            transition={{
-              opacity: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
-              scale: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
-              y: { duration: 6, repeat: Infinity, ease: [0.45, 0, 0.55, 1] },
-            }}
+            ref={scope}
+            style={{ opacity: 0 }}
             className="relative z-10 size-44 sm:size-56 rounded-[3rem] bg-zinc-950/80 border border-white/10 p-6 sm:p-8 shadow-[0_0_50px_rgba(0,0,0,0.8),_0_0_30px_rgba(255,255,255,0.03)] flex items-center justify-center backdrop-blur-xl"
           >
             <Image
