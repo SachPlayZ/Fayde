@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -147,7 +148,16 @@ func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
 	return s.repo.GetUserByID(ctx, id)
 }
 
+// Preferences holds the optional user preference fields a client may patch.
+type Preferences struct {
+	Theme         *string
+	DigestEnabled *bool
+	NotifPrefs    *json.RawMessage
+	ChatURL       *string
+	ChatKind      *string
+}
+
 // UpdatePreferences updates user preferences.
-func (s *Service) UpdatePreferences(ctx context.Context, id string, theme *string, digestEnabled *bool) error {
-	return s.repo.UpdatePreferences(ctx, id, theme, digestEnabled)
+func (s *Service) UpdatePreferences(ctx context.Context, id string, prefs Preferences) error {
+	return s.repo.UpdatePreferences(ctx, id, prefs)
 }

@@ -54,7 +54,7 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 
 const taskSelect = `t.id, t.user_id, t.title, t.description, t.status, t.priority,
 	t.due_date, t.recurrence, t.recurrence_end, t.parent_task_id, t.assignee_id,
-	a.email AS assignee_email, t.sort_order, t.effort_points, t.project_id,
+	a.email AS assignee_email, t.external_event_id, t.sort_order, t.effort_points, t.project_id,
 	p.name AS project_name, t.created_at, t.updated_at`
 
 // scanTask scans a task row (without tags/subtask counts — loaded separately).
@@ -65,7 +65,7 @@ func scanTask(row interface {
 	err := row.Scan(
 		&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.Priority,
 		&t.DueDate, &t.Recurrence, &t.RecurrenceEnd, &t.ParentTaskID, &t.AssigneeID,
-		&t.AssigneeEmail, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
+		&t.AssigneeEmail, &t.ExternalEventID, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
 		&t.ProjectName, &t.CreatedAt, &t.UpdatedAt,
 	)
 	if err != nil {
@@ -266,7 +266,7 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 		err := rows.Scan(
 			&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.Priority,
 			&t.DueDate, &t.Recurrence, &t.RecurrenceEnd, &t.ParentTaskID, &t.AssigneeID,
-			&t.AssigneeEmail, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
+			&t.AssigneeEmail, &t.ExternalEventID, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
 			&t.ProjectName, &t.CreatedAt, &t.UpdatedAt,
 			&total,
 		)
@@ -505,7 +505,7 @@ func (r *pgRepository) ListAllWithDueDate(ctx context.Context, userID string) ([
 		if err := rows.Scan(
 			&t.ID, &t.UserID, &t.Title, &t.Description, &t.Status, &t.Priority,
 			&t.DueDate, &t.Recurrence, &t.RecurrenceEnd, &t.ParentTaskID, &t.AssigneeID,
-			&t.AssigneeEmail, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
+			&t.AssigneeEmail, &t.ExternalEventID, &t.SortOrder, &t.EffortPoints, &t.ProjectID,
 			&t.ProjectName, &t.CreatedAt, &t.UpdatedAt,
 		); err != nil {
 			return nil, err

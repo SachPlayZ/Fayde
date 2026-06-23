@@ -66,12 +66,12 @@ func (s *Service) Fire(ctx context.Context, userID, event string, payload any) {
 
 			req, _ := http.NewRequest("POST", h.URL, bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
-			req.Header.Set("X-Rivz-Event", event)
+			req.Header.Set("X-Fayde-Event", event)
 
 			if h.Secret != "" {
 				mac := hmac.New(sha256.New, []byte(h.Secret))
 				mac.Write(body)
-				req.Header.Set("X-Rivz-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
+				req.Header.Set("X-Fayde-Signature", "sha256="+hex.EncodeToString(mac.Sum(nil)))
 			}
 
 			client := &http.Client{Timeout: 10 * time.Second}

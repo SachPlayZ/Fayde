@@ -17,7 +17,7 @@ type Repository interface {
 	CreateUser(ctx context.Context, email, passwordHash string) (*User, error)
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 	GetUserByID(ctx context.Context, id string) (*User, error)
-	UpdatePreferences(ctx context.Context, id string, theme *string, digestEnabled *bool) error
+	UpdatePreferences(ctx context.Context, id string, prefs Preferences) error
 
 	UpsertOAuthUser(ctx context.Context, email, provider, providerID string) (*User, error)
 
@@ -38,6 +38,7 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 
 const userSelect = `id, email, password_hash, role,
 	COALESCE(theme,'system'), COALESCE(digest_enabled,true),
+	COALESCE(notif_prefs,'{}'), notif_chat_url, notif_chat_kind, inbox_token,
 	COALESCE(email_verified,false), COALESCE(provider,'local'), provider_id,
 	created_at`
 
@@ -46,6 +47,7 @@ func scanUser(row pgx.Row) (*User, error) {
 	err := row.Scan(
 		&u.ID, &u.Email, &u.passwordHash, &u.Role,
 		&u.Theme, &u.DigestEnabled,
+		&u.NotifPrefs, &u.ChatURL, &u.ChatKind, &u.InboxToken,
 		&u.EmailVerified, &u.Provider, &u.ProviderID,
 		&u.CreatedAt,
 	)
@@ -87,23 +89,38 @@ func (r *pgRepository) GetUserByID(ctx context.Context, id string) (*User, error
 	return u, nil
 }
 
-// UpdatePreferences updates theme and/or digest_enabled for a user.
-func (r *pgRepository) UpdatePreferences(ctx context.Context, id string, theme *string, digestEnabled *bool) error {
-	if theme == nil && digestEnabled == nil {
-		return nil
-	}
+// UpdatePreferences updates any provided user preference fields.
+func (r *pgRepository) UpdatePreferences(ctx context.Context, id string, prefs Preferences) error {
 	sets := []string{}
 	args := []any{}
 	idx := 1
-	if theme != nil {
+	if prefs.Theme != nil {
 		sets = append(sets, fmt.Sprintf("theme=$%d", idx))
-		args = append(args, *theme)
+		args = append(args, *prefs.Theme)
 		idx++
 	}
-	if digestEnabled != nil {
+	if prefs.DigestEnabled != nil {
 		sets = append(sets, fmt.Sprintf("digest_enabled=$%d", idx))
-		args = append(args, *digestEnabled)
+		args = append(args, *prefs.DigestEnabled)
 		idx++
+	}
+	if prefs.NotifPrefs != nil {
+		sets = append(sets, fmt.Sprintf("notif_prefs=$%d", idx))
+		args = append(args, []byte(*prefs.NotifPrefs))
+		idx++
+	}
+	if prefs.ChatURL != nil {
+		sets = append(sets, fmt.Sprintf("notif_chat_url=$%d", idx))
+		args = append(args, *prefs.ChatURL)
+		idx++
+	}
+	if prefs.ChatKind != nil {
+		sets = append(sets, fmt.Sprintf("notif_chat_kind=$%d", idx))
+		args = append(args, *prefs.ChatKind)
+		idx++
+	}
+	if len(sets) == 0 {
+		return nil
 	}
 	args = append(args, id)
 	q := fmt.Sprintf(`UPDATE users SET %s WHERE id=$%d`, joinSets(sets), idx)

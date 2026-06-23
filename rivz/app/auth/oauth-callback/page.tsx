@@ -1,11 +1,19 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export default function OAuthCallbackPage() {
+  return (
+    <Suspense fallback={null}>
+      <OAuthCallbackInner />
+    </Suspense>
+  );
+}
+
+function OAuthCallbackInner() {
   const params = useSearchParams();
   const router = useRouter();
   const { login } = useAuth();

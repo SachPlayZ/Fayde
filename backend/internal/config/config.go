@@ -8,29 +8,32 @@ import (
 
 // Config holds all application configuration values.
 type Config struct {
-	DatabaseURL          string
-	JWTSecret            string
-	Port                 string
-	CORSOrigin           string
-	AWSRegion            string
-	AWSAccessKeyID       string
-	AWSSecretAccessKey   string
-	S3Bucket             string
-	SMTPHost             string
-	SMTPPort             string
-	SMTPUser             string
-	SMTPPass             string
-	FromEmail            string
-	GroqAPIKey           string
-	GitHubWebhookSecret  string
-	FrontendURL          string
-	AppURL               string
-	ResendAPIKey         string
-	ResendFrom           string
-	GoogleClientID       string
-	GoogleClientSecret   string
-	GitHubClientID       string
-	GitHubClientSecret   string
+	DatabaseURL         string
+	JWTSecret           string
+	Port                string
+	CORSOrigin          string
+	AWSRegion           string
+	AWSAccessKeyID      string
+	AWSSecretAccessKey  string
+	S3Bucket            string
+	SMTPHost            string
+	SMTPPort            string
+	SMTPUser            string
+	SMTPPass            string
+	FromEmail           string
+	GroqAPIKey          string
+	GitHubWebhookSecret string
+	FrontendURL         string
+	AppURL              string
+	ResendAPIKey        string
+	ResendFrom          string
+	GoogleClientID      string
+	GoogleClientSecret  string
+	GitHubClientID      string
+	GitHubClientSecret  string
+	VAPIDPublicKey      string
+	VAPIDPrivateKey     string
+	VAPIDSubject        string
 }
 
 // Load reads configuration from environment variables.
@@ -80,7 +83,12 @@ func Load() (*Config, error) {
 
 	resendFrom := os.Getenv("RESEND_FROM")
 	if resendFrom == "" {
-		resendFrom = "noreply@rivz.app"
+		resendFrom = "noreply@fayde.app"
+	}
+
+	vapidSubject := os.Getenv("VAPID_SUBJECT")
+	if vapidSubject == "" {
+		vapidSubject = "mailto:" + resendFrom
 	}
 
 	return &Config{
@@ -107,5 +115,8 @@ func Load() (*Config, error) {
 		GoogleClientSecret:  os.Getenv("GOOGLE_CLIENT_SECRET"),
 		GitHubClientID:      os.Getenv("GITHUB_CLIENT_ID"),
 		GitHubClientSecret:  os.Getenv("GITHUB_CLIENT_SECRET"),
+		VAPIDPublicKey:      os.Getenv("VAPID_PUBLIC_KEY"),
+		VAPIDPrivateKey:     os.Getenv("VAPID_PRIVATE_KEY"),
+		VAPIDSubject:        vapidSubject,
 	}, nil
 }

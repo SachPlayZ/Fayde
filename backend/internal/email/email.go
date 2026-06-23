@@ -45,6 +45,27 @@ func (c *Client) SendVerification(to, verifyURL string) error {
 	return c.send(to, "Verify your email address", html)
 }
 
+// SendNotification emails a single notification with an optional deep link.
+func (c *Client) SendNotification(to, title, body, url string) error {
+	btn := ""
+	if url != "" {
+		btn = fmt.Sprintf(`<a href="%s" style="display:inline-block;background:#000;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;font-size:14px;margin-top:20px">Open in Fayde</a>`, url)
+	}
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html>
+<body style="font-family:system-ui,sans-serif;background:#f9fafb;padding:40px 0;margin:0">
+  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:40px;box-shadow:0 1px 3px rgba(0,0,0,.08)">
+    <h1 style="font-size:20px;font-weight:700;margin:0 0 8px">%s</h1>
+    <p style="color:#374151;margin:0;line-height:1.5">%s</p>
+    %s
+    <p style="margin:28px 0 0;font-size:12px;color:#9ca3af">Manage notification settings in Fayde to change how you're notified.</p>
+  </div>
+</body>
+</html>`, title, body, btn)
+
+	return c.send(to, title, html)
+}
+
 func (c *Client) send(to, subject, html string) error {
 	payload := map[string]any{
 		"from":    c.from,

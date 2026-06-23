@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useVerifyEmail, useResendVerification } from "@/lib/verify-hooks";
@@ -117,6 +117,14 @@ function RequestResend() {
 }
 
 export default function VerifyEmailPage() {
+  return (
+    <Suspense fallback={null}>
+      <VerifyEmailInner />
+    </Suspense>
+  );
+}
+
+function VerifyEmailInner() {
   const params = useSearchParams();
   const token = params.get("token");
 

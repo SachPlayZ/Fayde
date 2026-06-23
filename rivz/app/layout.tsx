@@ -14,8 +14,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Rivz",
-  description: "Task manager",
+  title: "Fayde",
+  description: "Fayde — your personal productivity suite",
   manifest: "/manifest.json",
 };
 

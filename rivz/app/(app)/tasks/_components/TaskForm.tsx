@@ -83,8 +83,14 @@ import {
   RefreshCw,
   User,
   AlertTriangle,
+  BellRing,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  useReminders,
+  useCreateReminder,
+  useDeleteReminder,
+} from "@/lib/reminders-hooks";
 import { toast } from "sonner";
 
 type TaskFormProps = {
@@ -908,6 +914,9 @@ export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
             </div>
           )}
 
+          {/* Reminders — edit mode only */}
+          {isEdit && task && <RemindersSection taskId={task.id} />}
+
           {/* Comments — edit mode only */}
           {isEdit && (
             <div className="flex flex-col gap-0 border border-border rounded-xl overflow-hidden">
@@ -1036,5 +1045,83 @@ export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function RemindersSection({ taskId }: { taskId: string }) {
+  const [open, setOpen] = useState(false);
+  const { data: reminders = [] } = useReminders(taskId, open);
+  const create = useCreateReminder(taskId);
+  const del = useDeleteReminder(taskId);
+  const [when, setWhen] = useState("");
+
+  const add = () => {
+    if (!when) return;
+    create.mutate(
+      { remind_at: new Date(when).toISOString() },
+      {
+        onSuccess: () => {
+          setWhen("");
+          toast.success("Reminder set");
+        },
+        onError: () => toast.error("Failed to set reminder"),
+      }
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-0 border border-border rounded-xl overflow-hidden">
+      <button
+        type="button"
+        className="flex items-center justify-between px-3 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors w-full text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span className="flex items-center gap-2">
+          <BellRing className="h-3.5 w-3.5 text-muted-foreground" />
+          Reminders
+          {reminders.length > 0 && (
+            <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {reminders.length}
+            </span>
+          )}
+        </span>
+        {open ? (
+          <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        )}
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-2 flex flex-col gap-2 border-t border-border bg-muted/20">
+          {reminders.map((rm) => (
+            <div key={rm.id} className="flex items-center gap-2 text-xs">
+              <BellRing className="h-3 w-3 text-amber-500 shrink-0" />
+              <span className="flex-1">
+                {new Date(rm.remind_at).toLocaleString()}
+                {rm.sent && <span className="text-muted-foreground"> · sent</span>}
+              </span>
+              <button
+                type="button"
+                onClick={() => del.mutate(rm.id)}
+                className="text-muted-foreground hover:text-rose-500"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2">
+            <Input
+              type="datetime-local"
+              value={when}
+              onChange={(e) => setWhen(e.target.value)}
+              className="h-8 flex-1 text-xs"
+            />
+            <Button type="button" size="sm" className="h-8" onClick={add} disabled={!when || create.isPending}>
+              Add
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

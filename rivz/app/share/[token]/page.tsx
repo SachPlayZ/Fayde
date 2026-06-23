@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { CalendarDays, Loader2 } from "lucide-react";
+import Image from "next/image";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
@@ -88,7 +89,10 @@ export default function SharedTaskPage({
       {/* Header */}
       <header className="border-b border-border bg-background/90 backdrop-blur-md">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center">
-          <span className="font-bold text-sm tracking-tight">Rivz</span>
+          <span className="flex items-center gap-2">
+            <Image src="/logo.png" alt="Fayde" width={24} height={24} className="size-6 rounded-md" />
+            <span className="font-bold text-sm tracking-tight">Fayde</span>
+          </span>
         </div>
       </header>
 
@@ -145,7 +149,7 @@ export default function SharedTaskPage({
             <div className="pt-4 border-t border-border">
               <p className="text-xs text-muted-foreground">
                 Shared via{" "}
-                <span className="font-semibold text-foreground">Rivz</span> — task manager
+                <span className="font-semibold text-foreground">Fayde</span> — productivity suite
               </p>
             </div>
           </div>

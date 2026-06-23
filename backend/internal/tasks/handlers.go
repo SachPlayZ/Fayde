@@ -356,12 +356,12 @@ func (h *Handler) ExportICS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/calendar")
 	w.Header().Set("Content-Disposition", "attachment; filename=\"tasks.ics\"")
 
-	fmt.Fprintf(w, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Rivz//Tasks//EN\r\nCALSCALE:GREGORIAN\r\n")
+	fmt.Fprintf(w, "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Fayde//Tasks//EN\r\nCALSCALE:GREGORIAN\r\n")
 	for _, t := range tasks {
 		if t.DueDate == nil {
 			continue
 		}
-		uid := t.ID + "@rivz"
+		uid := t.ID + "@fayde"
 		dtStamp := time.Now().UTC().Format("20060102T150405Z")
 		dtStart := t.DueDate.UTC().Format("20060102")
 		fmt.Fprintf(w, "BEGIN:VEVENT\r\nUID:%s\r\nDTSTAMP:%s\r\nDTSTART;VALUE=DATE:%s\r\nSUMMARY:%s\r\nDESCRIPTION:%s\r\nSTATUS:%s\r\nEND:VEVENT\r\n",

@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS note_backlinks;
+DROP TABLE IF EXISTS note_links;
+DROP TABLE IF EXISTS notes;

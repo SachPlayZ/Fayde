@@ -14,6 +14,13 @@ export function useParseTask() {
   });
 }
 
+export function usePlanDay() {
+  return useMutation({
+    mutationFn: (body: { start_hour?: number; end_hour?: number }) =>
+      api.post<{ plan: string }>("/ai/plan-day", body),
+  });
+}
+
 export function useBreakdownTask() {
   return useMutation({
     mutationFn: (body: { title: string; description: string }) =>

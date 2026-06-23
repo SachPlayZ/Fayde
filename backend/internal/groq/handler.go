@@ -271,6 +271,49 @@ func (h *Handler) WeeklyDigest(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, 200, map[string]string{"digest": content})
 }
 
+// PlanDay handles POST /ai/plan-day. It produces a time-boxed schedule for
+// today's open tasks, respecting an optional working-hours window.
+func (h *Handler) PlanDay(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.JSON(w, 401, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	var body struct {
+		StartHour int `json:"start_hour"`
+		EndHour   int `json:"end_hour"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&body)
+	if body.StartHour == 0 && body.EndHour == 0 {
+		body.StartHour, body.EndHour = 9, 17
+	}
+
+	tasks, err := h.tasksFetcher.ListForAI(r.Context(), userID)
+	if err != nil {
+		httputil.JSON(w, 500, map[string]string{"error": "failed to fetch tasks"})
+		return
+	}
+
+	var open []*TaskSummary
+	for _, t := range tasks {
+		if t.Status != "done" && t.Status != "failed" {
+			open = append(open, t)
+		}
+	}
+	summary := buildTaskSummary(open)
+
+	content, err := h.client.Chat(r.Context(), []Message{
+		{Role: "system", Content: "You are a focus coach. Build a realistic time-boxed plan for today between the user's working hours. Group similar work, add short breaks, and order by priority and due date. Output concise markdown with time slots like '09:00–10:30 — <task>'. Keep it under 12 slots."},
+		{Role: "user", Content: fmt.Sprintf("Working hours: %02d:00 to %02d:00.\nMy open tasks:\n%s", body.StartHour, body.EndHour, summary)},
+	})
+	if err != nil {
+		httputil.JSON(w, 502, map[string]string{"error": "AI request failed"})
+		return
+	}
+	httputil.JSON(w, 200, map[string]string{"plan": content})
+}
+
 // LoadAlert handles GET /ai/load-alert.
 func (h *Handler) LoadAlert(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())

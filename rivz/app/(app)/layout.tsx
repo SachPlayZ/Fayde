@@ -9,9 +9,10 @@ import { CommandPaletteProvider } from "@/components/CommandPalette";
 import { QuickCaptureProvider } from "@/lib/quick-capture-context";
 import { QuickCaptureDialog } from "@/components/QuickCaptureDialog";
 import { PomodoroTimer } from "@/components/PomodoroTimer";
-import { LogOut, Activity, ShieldCheck, ClipboardList, FolderKanban, Zap, Settings } from "lucide-react";
+import { LogOut, Activity, ShieldCheck, ClipboardList, FolderKanban, Zap, Settings, FileText, LayoutDashboard, Flame, Target } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
+import Image from "next/image";
 import { PageTracker } from "@/components/PageTracker";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -45,17 +46,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen flex flex-col">
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="font-semibold text-sm tracking-tight">TaskFlow</span>
+          <Link href="/dashboard" className="flex items-center gap-2">
+            <Image src="/logo.png" alt="Fayde" width={24} height={24} className="size-6 rounded-md" priority />
+            <span className="font-semibold text-sm tracking-tight">Fayde</span>
+          </Link>
 
           <div className="flex items-center gap-1.5">
             {/* Nav links */}
             <nav className="hidden sm:flex items-center gap-0.5 mr-2">
+              <Link
+                href="/dashboard"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
+              >
+                <LayoutDashboard className="w-3.5 h-3.5" />
+                Home
+              </Link>
               <Link
                 href="/tasks"
                 className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
               >
                 <ClipboardList className="w-3.5 h-3.5" />
                 Tasks
+              </Link>
+              <Link
+                href="/habits"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
+              >
+                <Flame className="w-3.5 h-3.5" />
+                Habits
+              </Link>
+              <Link
+                href="/goals"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
+              >
+                <Target className="w-3.5 h-3.5" />
+                Goals
               </Link>
               <Link
                 href="/projects"
@@ -70,6 +95,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               >
                 <Zap className="w-3.5 h-3.5" />
                 Sprints
+              </Link>
+              <Link
+                href="/docs"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-xs"}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Docs
               </Link>
               <Link
                 href="/settings"

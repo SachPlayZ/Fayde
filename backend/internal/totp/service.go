@@ -20,7 +20,7 @@ func NewService(repo Repository) *Service {
 // GenerateSecret creates a new TOTP secret for the user and returns setup info.
 func (s *Service) GenerateSecret(ctx context.Context, userID, userEmail string) (*SetupResponse, error) {
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "Rivz",
+		Issuer:      "Fayde",
 		AccountName: userEmail,
 		SecretSize:  20,
 	})

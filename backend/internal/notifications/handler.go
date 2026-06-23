@@ -1,7 +1,9 @@
 package notifications
 
 import (
+	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/httputil"
@@ -37,6 +39,23 @@ func (h *Handler) MarkAllRead(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
 	if err := h.svc.MarkAllRead(r.Context(), userID); err != nil {
 		httputil.Error(w, http.StatusInternalServerError, "failed to mark all read")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) Snooze(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	id := chi.URLParam(r, "id")
+	var body struct {
+		Until time.Time `json:"until"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Until.IsZero() {
+		httputil.Error(w, http.StatusBadRequest, "until required")
+		return
+	}
+	if err := h.svc.Snooze(r.Context(), id, userID, body.Until); err != nil {
+		httputil.Error(w, http.StatusInternalServerError, "failed to snooze")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

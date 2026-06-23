@@ -168,6 +168,8 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	httputil.JSON(w, http.StatusOK, PublicUser{
 		ID: user.ID, Email: user.Email, Role: user.Role,
 		Theme: user.Theme, DigestEnabled: user.DigestEnabled,
+		NotifPrefs: user.NotifPrefs, ChatURL: user.ChatURL, ChatKind: user.ChatKind,
+		InboxToken: user.InboxToken,
 	})
 }
 
@@ -180,15 +182,25 @@ func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var body struct {
-		Theme         *string `json:"theme"`
-		DigestEnabled *bool   `json:"digest_enabled"`
+		Theme         *string          `json:"theme"`
+		DigestEnabled *bool            `json:"digest_enabled"`
+		NotifPrefs    *json.RawMessage `json:"notif_prefs"`
+		ChatURL       *string          `json:"notif_chat_url"`
+		ChatKind      *string          `json:"notif_chat_kind"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 
-	if err := h.svc.UpdatePreferences(r.Context(), userID, body.Theme, body.DigestEnabled); err != nil {
+	prefs := Preferences{
+		Theme:         body.Theme,
+		DigestEnabled: body.DigestEnabled,
+		NotifPrefs:    body.NotifPrefs,
+		ChatURL:       body.ChatURL,
+		ChatKind:      body.ChatKind,
+	}
+	if err := h.svc.UpdatePreferences(r.Context(), userID, prefs); err != nil {
 		httputil.Error(w, http.StatusInternalServerError, "failed to update preferences")
 		return
 	}

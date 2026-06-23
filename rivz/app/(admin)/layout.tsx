@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import { ThemeToggle } from "@/app/(app)/_components/ThemeToggle";
 import { LogOut, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { user, logout, loading } = useAuth();
@@ -40,7 +41,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-sm tracking-tight">TaskFlow</span>
+            <Image src="/logo.png" alt="Fayde" width={24} height={24} className="size-6 rounded-md" />
+            <span className="font-semibold text-sm tracking-tight">Fayde</span>
             <span className="flex items-center gap-1 rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
               <ShieldCheck className="size-2.5" />
               Admin

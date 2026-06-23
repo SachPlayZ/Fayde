@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import Image from "next/image";
 import { toast } from "sonner";
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
@@ -67,8 +68,9 @@ export default function SignupPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center animate-in fade-in-0 slide-in-from-bottom-4 duration-500 stagger-1">
+          <Image src="/logo.png" alt="Fayde" width={48} height={48} className="size-12 rounded-xl mx-auto mb-4" priority />
           <h1 className="text-2xl font-bold tracking-tight">Create an account</h1>
-          <p className="text-sm text-muted-foreground mt-1">Get started with TaskFlow for free</p>
+          <p className="text-sm text-muted-foreground mt-1">Get started with Fayde for free</p>
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6 shadow-sm animate-in fade-in-0 slide-in-from-bottom-4 duration-500 stagger-2 flex flex-col gap-4">

@@ -23,6 +23,7 @@ type Task struct {
 	ParentTaskID     *string    `json:"parent_task_id"`
 	AssigneeID       *string    `json:"assignee_id"`
 	AssigneeEmail    *string    `json:"assignee_email"`
+	ExternalEventID  *string    `json:"external_event_id"`
 	SortOrder        float64    `json:"sort_order"`
 	EffortPoints     *int       `json:"effort_points"`
 	ProjectID        *string    `json:"project_id"`

@@ -8,16 +8,25 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/apitokens"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/attachments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/automations"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/comments"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/calendarsync"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/customfields"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/dashboard"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/dependencies"
 	githubpkg "github.com/SachPlayZ/rivz-asn/backend/internal/github"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/goals"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/groq"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/habits"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/httputil"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/inbox"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/notes"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/notifications"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/pomodoro"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/projects"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/reminders"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/savedfilters"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/search"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sharing"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sprints"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
@@ -29,6 +38,7 @@ import (
 	totppkg "github.com/SachPlayZ/rivz-asn/backend/internal/totp"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/watchers"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/webhooks"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/webpush"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -63,6 +73,16 @@ func New(
 	pomodoroHandler *pomodoro.Handler,
 	groqHandler *groq.Handler,
 	apiTokensSvc *apitokens.Service,
+	webpushHandler *webpush.Handler,
+	notesHandler *notes.Handler,
+	searchHandler *search.Handler,
+	habitsHandler *habits.Handler,
+	dashboardHandler *dashboard.Handler,
+	goalsHandler *goals.Handler,
+	remindersHandler *reminders.Handler,
+	automationsHandler *automations.Handler,
+	inboxHandler *inbox.Handler,
+	calendarSyncHandler *calendarsync.Handler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -88,6 +108,7 @@ func New(
 	r.Post("/track", adminHandler.TrackPageView)
 	r.Get("/share/{token}", sharingHandler.PublicView)
 	r.Post("/webhooks/github", githubHandler.Webhook)
+	r.Post("/webhooks/email", inboxHandler.Webhook)
 
 	// Auth routes.
 	r.Post("/auth/signup", authHandler.Signup)
@@ -100,6 +121,10 @@ func New(
 	r.Get("/auth/github/callback", oauthHandler.GitHubCallback)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Get("/auth/me", authHandler.Me)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Patch("/auth/me/preferences", authHandler.UpdatePreferences)
+
+	// Google Calendar Sync Public/OAuth Flow Routes
+	r.Get("/calendar/connect", calendarSyncHandler.Connect)
+	r.Get("/calendar/callback", calendarSyncHandler.Callback)
 
 	// TOTP auth routes (auth required).
 	r.With(auth.Authenticate(cfg.JWTSecret)).Post("/auth/totp/setup", totpHandler.Setup)
@@ -162,8 +187,20 @@ func New(
 		// Notifications.
 		r.Get("/notifications", notifHandler.List)
 		r.Patch("/notifications/{id}/read", notifHandler.MarkRead)
+		r.Post("/notifications/{id}/snooze", notifHandler.Snooze)
 		r.Post("/notifications/read-all", notifHandler.MarkAllRead)
 		r.Get("/notifications/unread-count", notifHandler.UnreadCount)
+
+		// Automations.
+		r.Get("/automations", automationsHandler.List)
+		r.Post("/automations", automationsHandler.Create)
+		r.Patch("/automations/{id}", automationsHandler.Update)
+		r.Delete("/automations/{id}", automationsHandler.Delete)
+
+		// Reminders.
+		r.Get("/tasks/{id}/reminders", remindersHandler.ListByTask)
+		r.Post("/tasks/{id}/reminders", remindersHandler.Create)
+		r.Delete("/reminders/{reminderId}", remindersHandler.Delete)
 
 		// Projects.
 		r.Get("/projects", projectsHandler.List)
@@ -221,6 +258,51 @@ func New(
 		r.Delete("/tasks/{id}/share", sharingHandler.RevokeToken)
 		r.Get("/tasks/{id}/share", sharingHandler.GetToken)
 
+		// Dashboard.
+		r.Get("/dashboard", dashboardHandler.Get)
+
+		// Goals / OKRs.
+		r.Get("/goals", goalsHandler.List)
+		r.Post("/goals", goalsHandler.Create)
+		r.Get("/goals/{id}", goalsHandler.Get)
+		r.Patch("/goals/{id}", goalsHandler.Update)
+		r.Delete("/goals/{id}", goalsHandler.Delete)
+		r.Post("/goals/{id}/key-results", goalsHandler.AddKR)
+		r.Patch("/goals/{id}/key-results/{krId}", goalsHandler.UpdateKR)
+		r.Delete("/goals/{id}/key-results/{krId}", goalsHandler.DeleteKR)
+		r.Get("/goals/{id}/tasks", goalsHandler.ListTasks)
+		r.Post("/goals/{id}/tasks/{taskId}", goalsHandler.LinkTask)
+		r.Delete("/goals/{id}/tasks/{taskId}", goalsHandler.UnlinkTask)
+
+		// Habits.
+		r.Get("/habits", habitsHandler.List)
+		r.Post("/habits", habitsHandler.Create)
+		r.Patch("/habits/{id}", habitsHandler.Update)
+		r.Delete("/habits/{id}", habitsHandler.Delete)
+		r.Post("/habits/{id}/toggle", habitsHandler.Toggle)
+		r.Get("/habits/{id}/logs", habitsHandler.Logs)
+
+		// Global search.
+		r.Get("/search", searchHandler.Search)
+
+		// Notes / Docs.
+		r.Get("/notes", notesHandler.List)
+		r.Post("/notes", notesHandler.Create)
+		r.Put("/notes/reorder", notesHandler.Reorder)
+		r.Get("/notes/{id}", notesHandler.Get)
+		r.Patch("/notes/{id}", notesHandler.Update)
+		r.Delete("/notes/{id}", notesHandler.Delete)
+		r.Get("/notes/{id}/backlinks", notesHandler.Backlinks)
+		r.Get("/notes/{id}/tasks", notesHandler.ListTaskLinks)
+		r.Post("/notes/{id}/tasks/{taskId}", notesHandler.LinkTask)
+		r.Delete("/notes/{id}/tasks/{taskId}", notesHandler.UnlinkTask)
+		r.Get("/tasks/{id}/notes", notesHandler.ListByTask)
+
+		// Web push.
+		r.Get("/push/public-key", webpushHandler.PublicKey)
+		r.Post("/push/subscribe", webpushHandler.Subscribe)
+		r.Delete("/push/subscribe", webpushHandler.Unsubscribe)
+
 		// Pomodoro.
 		r.Post("/pomodoro/start", pomodoroHandler.Start)
 		r.Post("/pomodoro/{id}/complete", pomodoroHandler.Complete)
@@ -229,6 +311,9 @@ func New(
 		r.Get("/pomodoro/active", pomodoroHandler.Active)
 
 		// Settings.
+		r.Get("/calendar/status", calendarSyncHandler.Status)
+		r.Delete("/calendar/disconnect", calendarSyncHandler.Disconnect)
+
 		r.Get("/settings/api-tokens", apiTokensHandler.List)
 		r.Post("/settings/api-tokens", apiTokensHandler.Generate)
 		r.Delete("/settings/api-tokens/{id}", apiTokensHandler.Delete)
@@ -247,6 +332,7 @@ func New(
 			r.Post("/ai/estimate-time", groqHandler.EstimateTime)
 			r.Get("/ai/weekly-digest", groqHandler.WeeklyDigest)
 			r.Get("/ai/load-alert", groqHandler.LoadAlert)
+			r.Post("/ai/plan-day", groqHandler.PlanDay)
 		}
 	})
 

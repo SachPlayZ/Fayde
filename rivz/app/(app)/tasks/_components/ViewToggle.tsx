@@ -1,15 +1,16 @@
 "use client";
-import { Table2, Kanban, BarChart2, CalendarDays } from "lucide-react";
+import { Table2, Kanban, BarChart2, CalendarDays, CalendarRange } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-export type View = "table" | "kanban" | "gantt" | "weekly";
+export type View = "table" | "kanban" | "gantt" | "weekly" | "calendar";
 
 const VIEWS: { id: View; label: string; icon: React.ReactNode }[] = [
-  { id: "table",   label: "Table view",   icon: <Table2 className="size-3.5" /> },
-  { id: "kanban",  label: "Kanban view",  icon: <Kanban className="size-3.5" /> },
-  { id: "gantt",   label: "Gantt view",   icon: <BarChart2 className="size-3.5" /> },
-  { id: "weekly",  label: "Weekly view",  icon: <CalendarDays className="size-3.5" /> },
+  { id: "table",    label: "Table view",    icon: <Table2 className="size-3.5" /> },
+  { id: "kanban",   label: "Kanban view",   icon: <Kanban className="size-3.5" /> },
+  { id: "gantt",    label: "Gantt view",    icon: <BarChart2 className="size-3.5" /> },
+  { id: "weekly",   label: "Weekly view",   icon: <CalendarDays className="size-3.5" /> },
+  { id: "calendar", label: "Calendar view", icon: <CalendarRange className="size-3.5" /> },
 ];
 
 export function ViewToggle({ view, onChange }: { view: View; onChange: (v: View) => void }) {

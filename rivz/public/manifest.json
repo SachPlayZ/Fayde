@@ -1,7 +1,7 @@
 {
-  "name": "Rivz",
-  "short_name": "Rivz",
-  "description": "Task manager",
+  "name": "Fayde",
+  "short_name": "Fayde",
+  "description": "Fayde — your personal productivity suite",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#09090b",

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { loginSchema, type LoginInput } from "@/lib/schemas";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
+import Image from "next/image";
 import { toast } from "sonner";
 import { useResendVerification } from "@/lib/verify-hooks";
 import { Mail } from "lucide-react";
@@ -36,6 +37,14 @@ function GitHubIcon() {
 }
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const { login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -94,8 +103,9 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center animate-in fade-in-0 slide-in-from-bottom-4 duration-500 stagger-1">
+          <Image src="/logo.png" alt="Fayde" width={48} height={48} className="size-12 rounded-xl mx-auto mb-4" priority />
           <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to your TaskFlow account</p>
+          <p className="text-sm text-muted-foreground mt-1">Sign in to your Fayde account</p>
         </div>
 
         <div className="bg-card border border-border rounded-xl p-6 shadow-sm animate-in fade-in-0 slide-in-from-bottom-4 duration-500 stagger-2 flex flex-col gap-4">

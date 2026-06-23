@@ -20,6 +20,12 @@ type NotificationsService interface {
 	Create(ctx context.Context, userID, nType string, taskID *string, message string)
 }
 
+// CalendarSyncService is the interface used to push task events to Google Calendar.
+type CalendarSyncService interface {
+	SyncTask(ctx context.Context, task *Task) error
+	DeleteEvent(ctx context.Context, userID, eventID string) error
+}
+
 // DependenciesService is used to check/notify when a task completes.
 type DependenciesService interface {
 	NotifyUnblocked(ctx context.Context, doneTaskID, ownerUserID string)
@@ -44,6 +50,19 @@ type Service struct {
 	depsSvc       DependenciesService
 	webhooksSvc   WebhooksService
 	watchersSvc   WatchersService
+	automationEng AutomationEngine
+	calendarSyncSvc CalendarSyncService
+}
+
+// AutomationEngine reacts to task lifecycle events (implemented by automations.Service).
+// Kept primitive to avoid an import cycle with the automations package.
+type AutomationEngine interface {
+	OnTaskEvent(ctx context.Context, userID, taskID, event, title, status, priority string)
+}
+
+// SetAutomationEngine wires in the automation engine post-construction.
+func (s *Service) SetAutomationEngine(eng AutomationEngine) {
+	s.automationEng = eng
 }
 
 // NewService creates a new tasks Service.
@@ -69,6 +88,11 @@ func (s *Service) SetWebhooksService(webhooksSvc WebhooksService) {
 // SetWatchersService wires in the watchers dependency.
 func (s *Service) SetWatchersService(watchersSvc WatchersService) {
 	s.watchersSvc = watchersSvc
+}
+
+// SetCalendarSyncService wires in the calendar sync dependency post-construction.
+func (s *Service) SetCalendarSyncService(calendarSyncSvc CalendarSyncService) {
+	s.calendarSyncSvc = calendarSyncSvc
 }
 
 // ListForAI implements groq.TasksFetcher.
@@ -124,6 +148,18 @@ func (s *Service) CreateTask(ctx context.Context, userID string, req CreateReque
 	if task.AssigneeID != nil && *task.AssigneeID != userID && s.notifSvc != nil {
 		msg := fmt.Sprintf("You were assigned task: %s", task.Title)
 		s.notifSvc.Create(ctx, *task.AssigneeID, "assigned", &task.ID, msg)
+	}
+
+	if s.automationEng != nil {
+		go s.automationEng.OnTaskEvent(context.Background(), userID, task.ID, "created", task.Title, task.Status, task.Priority)
+	}
+
+	if s.calendarSyncSvc != nil {
+		go func() {
+			if err := s.calendarSyncSvc.SyncTask(context.Background(), task); err != nil {
+				log.Printf("tasks: calendar sync: %v", err)
+			}
+		}()
 	}
 
 	return task, nil
@@ -205,11 +241,36 @@ func (s *Service) UpdateTask(ctx context.Context, id, userID string, req UpdateR
 		s.depsSvc.NotifyUnblocked(ctx, task.ID, userID)
 	}
 
+	if s.automationEng != nil {
+		event := "updated"
+		if req.Status != nil && (old.Status != *req.Status) {
+			event = "status_changed"
+		}
+		go s.automationEng.OnTaskEvent(context.Background(), userID, task.ID, event, task.Title, task.Status, task.Priority)
+	}
+
+	if s.calendarSyncSvc != nil {
+		go func() {
+			if err := s.calendarSyncSvc.SyncTask(context.Background(), task); err != nil {
+				log.Printf("tasks: calendar sync: %v", err)
+			}
+		}()
+	}
+
 	return task, nil
 }
 
 // DeleteTask removes a task owned by the given user.
 func (s *Service) DeleteTask(ctx context.Context, id, userID string) error {
+	task, getErr := s.repo.GetTask(ctx, id, userID)
+	if getErr == nil && task != nil && task.ExternalEventID != nil && *task.ExternalEventID != "" && s.calendarSyncSvc != nil {
+		go func(eventID string) {
+			if err := s.calendarSyncSvc.DeleteEvent(context.Background(), userID, eventID); err != nil {
+				log.Printf("tasks: calendar delete: %v", err)
+			}
+		}(*task.ExternalEventID)
+	}
+
 	if err := s.repo.DeleteTask(ctx, id, userID); err != nil {
 		return fmt.Errorf("service: delete task: %w", err)
 	}

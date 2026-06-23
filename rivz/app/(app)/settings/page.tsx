@@ -27,6 +27,18 @@ import {
   Plus,
   AlertTriangle,
 } from "lucide-react";
+import { Bell } from "lucide-react";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { useMe, useUpdatePreferences, usePushState, useEnablePush, useDisablePush, type NotifPrefs } from "@/lib/webpush-hooks";
+import { useCalendarStatus, useDisconnectCalendar } from "@/lib/calendar-sync-hooks";
+import { Workflow, Calendar } from "lucide-react";
+import { AutomationsTab } from "./_components/AutomationsTab";
 import { useAPITokens, useCreateAPIToken, useDeleteAPIToken } from "@/lib/apitokens-hooks";
 import { useTOTPStatus, useSetupTOTP, useEnableTOTP, useDisableTOTP } from "@/lib/totp-hooks";
 import type { TOTPSetup } from "@/lib/totp-hooks";
@@ -94,7 +106,7 @@ function APITokensTab() {
     <div className="flex flex-col gap-4 mt-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          Use API tokens to authenticate with the Rivz API from external tools.
+          Use API tokens to authenticate with the Fayde API from external tools.
         </p>
         <Dialog open={createOpen} onOpenChange={handleDialogClose}>
           <DialogTrigger asChild>
@@ -694,7 +706,273 @@ function GitHubTab() {
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+// ─── Notifications Tab ──────────────────────────────────────────────────────
+
+function ToggleRow({
+  label,
+  desc,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  desc: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between px-5 py-4">
+      <div className="min-w-0 pr-4">
+        <p className="text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={cn(
+          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
+          checked ? "bg-primary" : "bg-muted-foreground/30",
+          disabled && "opacity-50 cursor-not-allowed"
+        )}
+      >
+        <span
+          className={cn(
+            "inline-block size-5 transform rounded-full bg-white shadow transition-transform",
+            checked ? "translate-x-5" : "translate-x-0.5"
+          )}
+        />
+      </button>
+    </div>
+  );
+}
+
+function NotificationsTab() {
+  const { data: me, isLoading } = useMe();
+  const updatePrefs = useUpdatePreferences();
+  const pushState = usePushState();
+  const enablePush = useEnablePush();
+  const disablePush = useDisablePush();
+
+  // Chat draft: null until the user edits, then overrides the server value.
+  const [chatDraft, setChatDraft] = useState<{ url: string; kind: string } | null>(null);
+
+  if (isLoading || !me) {
+    return <div className="mt-4 h-64 rounded-xl border border-border bg-card animate-pulse" />;
+  }
+
+  const prefs = me.notif_prefs;
+  const chatUrl = chatDraft?.url ?? me.notif_chat_url ?? "";
+  const chatKind = chatDraft?.kind ?? me.notif_chat_kind ?? "slack";
+  const chatDirty = chatDraft !== null;
+  const editChat = (patch: Partial<{ url: string; kind: string }>) =>
+    setChatDraft({ url: chatUrl, kind: chatKind, ...patch });
+
+  const setChannel = (key: keyof NotifPrefs, v: boolean) => {
+    const next: NotifPrefs = { ...prefs, [key]: v };
+    updatePrefs.mutate(
+      { notif_prefs: next },
+      {
+        onSuccess: () => toast.success("Preferences updated"),
+        onError: () => toast.error("Failed to update"),
+      }
+    );
+  };
+
+  const togglePush = async (v: boolean) => {
+    try {
+      if (v) {
+        await enablePush.mutateAsync();
+        setChannel("web_push", true);
+        toast.success("Web push enabled");
+      } else {
+        await disablePush.mutateAsync();
+        setChannel("web_push", false);
+        toast.success("Web push disabled");
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Push toggle failed");
+    }
+  };
+
+  const saveChat = () => {
+    updatePrefs.mutate(
+      { notif_chat_url: chatUrl.trim(), notif_chat_kind: chatKind },
+      {
+        onSuccess: () => {
+          setChatDraft(null);
+          toast.success("Chat webhook saved");
+        },
+        onError: () => toast.error("Failed to save"),
+      }
+    );
+  };
+
+  const pushBusy = enablePush.isPending || disablePush.isPending;
+
+  return (
+    <div className="mt-4 flex flex-col gap-5">
+      <div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
+        <ToggleRow
+          label="In-app"
+          desc="Realtime alerts in the notification bell"
+          checked={prefs.in_app}
+          onChange={(v) => setChannel("in_app", v)}
+        />
+        <ToggleRow
+          label="Email"
+          desc="Send notifications to your email inbox"
+          checked={prefs.email}
+          onChange={(v) => setChannel("email", v)}
+        />
+        <ToggleRow
+          label="Web push"
+          desc={
+            pushState.data && !pushState.data.supported
+              ? "Not supported in this browser"
+              : "Browser push notifications, even when the tab is closed"
+          }
+          checked={prefs.web_push && !!pushState.data?.subscribed}
+          disabled={pushBusy || (pushState.data && !pushState.data.supported)}
+          onChange={togglePush}
+        />
+        <ToggleRow
+          label="Slack / Discord"
+          desc="Forward notifications to a chat channel"
+          checked={prefs.chat}
+          disabled={!chatUrl.trim()}
+          onChange={(v) => setChannel("chat", v)}
+        />
+      </div>
+
+      {me.inbox_token && (
+        <div className="rounded-xl border border-border bg-card p-5">
+          <Label className="text-sm font-medium">Email to task</Label>
+          <p className="text-xs text-muted-foreground mt-0.5 mb-3">
+            Send or forward an email to this address to create a task (subject → title, body → description).
+          </p>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 truncate rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
+              u+{me.inbox_token}@admin.sachindra.codes
+            </code>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(`u+${me.inbox_token}@admin.sachindra.codes`);
+                toast.success("Copied");
+              }}
+            >
+              <Copy className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl border border-border bg-card p-5">
+        <Label className="text-sm font-medium">Chat webhook</Label>
+        <p className="text-xs text-muted-foreground mt-0.5 mb-3">
+          Paste an incoming-webhook URL from Slack or Discord.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <Select value={chatKind} onValueChange={(v) => editChat({ kind: v })}>
+            <SelectTrigger className="w-full sm:w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="slack">Slack</SelectItem>
+              <SelectItem value="discord">Discord</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            placeholder="https://hooks.slack.com/services/..."
+            value={chatUrl}
+            onChange={(e) => editChat({ url: e.target.value })}
+            className="flex-1"
+          />
+          <Button onClick={saveChat} disabled={!chatDirty || updatePrefs.isPending}>
+            Save
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Calendar Tab ────────────────────────────────────────────────────────────
+
+function CalendarTab() {
+  const { data: status, isLoading } = useCalendarStatus();
+  const disconnect = useDisconnectCalendar();
+
+  const handleConnect = () => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    window.location.href = `${BASE_URL}/calendar/connect?token=${token}`;
+  };
+
+  const handleDisconnect = () => {
+    disconnect.mutate(undefined, {
+      onSuccess: () => toast.success("Google Calendar disconnected"),
+      onError: () => toast.error("Failed to disconnect Google Calendar"),
+    });
+  };
+
+  if (isLoading) {
+    return <div className="mt-4 h-32 rounded-xl border border-border bg-card animate-pulse" />;
+  }
+
+  const connected = status?.connected ?? false;
+
+  return (
+    <div className="mt-4 flex flex-col gap-4">
+      <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-4">
+        <div className="flex items-center gap-2.5">
+          <Calendar className="w-5 h-5 text-primary" />
+          <h3 className="text-sm font-semibold">Google Calendar Sync</h3>
+        </div>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          Automatically sync your tasks with due dates to your Google Calendar.
+        </p>
+
+        {connected ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-2 rounded-lg w-fit">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              Connected as <strong>{status?.email}</strong>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="w-fit"
+              onClick={handleDisconnect}
+              disabled={disconnect.isPending}
+            >
+              Disconnect Calendar
+            </Button>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-muted-foreground">
+              Authorize access to push tasks with deadlines to your Google Calendar.
+            </p>
+            <Button onClick={handleConnect} className="w-fit">
+              Connect Google Calendar
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Settings Page ──────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
   return (
@@ -702,12 +980,16 @@ export default function SettingsPage() {
       <div className="animate-in fade-in-0 slide-in-from-bottom-3 duration-400">
         <h2 className="text-xl font-bold tracking-tight">Settings</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
-          Manage your account, API tokens, and integrations
+          Manage your account, notifications, and integrations
         </p>
       </div>
 
-      <Tabs defaultValue="tokens">
+      <Tabs defaultValue="notifications">
         <TabsList className="bg-muted p-1 rounded-xl">
+          <TabsTrigger value="notifications" className="rounded-lg text-xs">
+            <Bell className="size-3.5 mr-1.5" />
+            Notifications
+          </TabsTrigger>
           <TabsTrigger value="tokens" className="rounded-lg text-xs">
             <Key className="size-3.5 mr-1.5" />
             API Tokens
@@ -715,6 +997,10 @@ export default function SettingsPage() {
           <TabsTrigger value="2fa" className="rounded-lg text-xs">
             <Shield className="size-3.5 mr-1.5" />
             2FA
+          </TabsTrigger>
+          <TabsTrigger value="automations" className="rounded-lg text-xs">
+            <Workflow className="size-3.5 mr-1.5" />
+            Automations
           </TabsTrigger>
           <TabsTrigger value="webhooks" className="rounded-lg text-xs">
             <Webhook className="size-3.5 mr-1.5" />
@@ -724,19 +1010,32 @@ export default function SettingsPage() {
             <GitBranch className="size-3.5 mr-1.5" />
             GitHub
           </TabsTrigger>
+          <TabsTrigger value="calendar" className="rounded-lg text-xs">
+            <Calendar className="size-3.5 mr-1.5" />
+            Calendar
+          </TabsTrigger>
         </TabsList>
 
+        <TabsContent value="notifications">
+          <NotificationsTab />
+        </TabsContent>
         <TabsContent value="tokens">
           <APITokensTab />
         </TabsContent>
         <TabsContent value="2fa">
           <TwoFATab />
         </TabsContent>
+        <TabsContent value="automations">
+          <AutomationsTab />
+        </TabsContent>
         <TabsContent value="webhooks">
           <WebhooksTab />
         </TabsContent>
         <TabsContent value="github">
           <GitHubTab />
+        </TabsContent>
+        <TabsContent value="calendar">
+          <CalendarTab />
         </TabsContent>
       </Tabs>
     </div>

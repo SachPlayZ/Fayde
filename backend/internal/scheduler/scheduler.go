@@ -11,6 +11,7 @@ import (
 
 	"github.com/SachPlayZ/rivz-asn/backend/internal/config"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/notifications"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/reminders"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -28,6 +29,21 @@ type taskItem struct {
 }
 
 func Start(ctx context.Context, pool *pgxpool.Pool, notifSvc *notifications.Service, cfg *config.Config) {
+	// Fast loop (every minute): fire custom reminders close to their time.
+	go func() {
+		t := time.NewTicker(1 * time.Minute)
+		defer t.Stop()
+		remRepo := reminders.NewRepository(pool)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case now := <-t.C:
+				fireReminders(ctx, remRepo, notifSvc, now)
+			}
+		}
+	}()
+
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 	for {
@@ -37,6 +53,26 @@ func Start(ctx context.Context, pool *pgxpool.Pool, notifSvc *notifications.Serv
 		case t := <-ticker.C:
 			runTick(ctx, pool, notifSvc, cfg, t)
 		}
+	}
+}
+
+// fireReminders delivers custom per-task reminders whose time has come.
+func fireReminders(ctx context.Context, repo *reminders.Repository, notifSvc *notifications.Service, now time.Time) {
+	due, err := repo.DuePending(ctx, now)
+	if err != nil {
+		log.Printf("scheduler: reminders due: %v", err)
+		return
+	}
+	for _, d := range due {
+		msg := d.Note
+		if msg == "" {
+			if d.TaskTitle != "" {
+				msg = "Reminder: " + d.TaskTitle
+			} else {
+				msg = "You have a reminder"
+			}
+		}
+		notifSvc.Create(ctx, d.UserID, "reminder", d.TaskID, msg)
 	}
 }
 

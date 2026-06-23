@@ -1,0 +1,4 @@
+ALTER TABLE tasks DROP COLUMN IF EXISTS goal_id;
+DROP TABLE IF EXISTS key_results;
+DROP TABLE IF EXISTS goals;
+DROP TYPE IF EXISTS goal_status;

@@ -10,24 +10,33 @@ import (
 	"syscall"
 	"time"
 
-	emailpkg "github.com/SachPlayZ/rivz-asn/backend/internal/email"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/activitylog"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/admin"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/apitokens"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/attachments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/automations"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/calendarsync"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/comments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/config"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/customfields"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/dashboard"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/db"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/dependencies"
+	emailpkg "github.com/SachPlayZ/rivz-asn/backend/internal/email"
 	githubpkg "github.com/SachPlayZ/rivz-asn/backend/internal/github"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/goals"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/groq"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/habits"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/inbox"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/notes"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/notifications"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/pomodoro"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/projects"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/reminders"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/savedfilters"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/scheduler"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/search"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/server"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sharing"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sprints"
@@ -40,6 +49,7 @@ import (
 	totppkg "github.com/SachPlayZ/rivz-asn/backend/internal/totp"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/watchers"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/webhooks"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/webpush"
 )
 
 func main() {
@@ -98,6 +108,16 @@ func run() error {
 	tasksSvc := tasks.NewService(tasksRepo, activitySvc, sseBroker)
 	tasksSvc.SetNotificationsService(notifSvc)
 	tasksHandler := tasks.NewHandler(tasksSvc, activitySvc)
+
+	// Google Calendar Sync.
+	calendarSyncRepo := calendarsync.NewRepository(pool)
+	calendarSyncSvc := calendarsync.NewService(
+		calendarSyncRepo,
+		cfg.GoogleClientID, cfg.GoogleClientSecret,
+		cfg.AppURL, cfg.FrontendURL, cfg.JWTSecret,
+	)
+	calendarSyncHandler := calendarsync.NewHandler(calendarSyncSvc, cfg.JWTSecret)
+	tasksSvc.SetCalendarSyncService(calendarSyncSvc)
 
 	// Admin.
 	adminHandler := admin.NewHandler(pool)
@@ -205,6 +225,53 @@ func run() error {
 	pomodoroSvc := pomodoro.NewService(pomodoroRepo)
 	pomodoroHandler := pomodoro.NewHandler(pomodoroSvc)
 
+	// Email-to-task inbound.
+	inboxRepo := inbox.NewRepository(pool)
+	inboxHandler := inbox.NewHandler(inboxRepo, tasksSvc)
+
+	// Automations engine.
+	automationsRepo := automations.NewRepository(pool)
+	automationsSvc := automations.NewService(automationsRepo, notifSvc)
+	automationsHandler := automations.NewHandler(automationsSvc)
+	tasksSvc.SetAutomationEngine(automationsSvc)
+
+	// Reminders.
+	remindersRepo := reminders.NewRepository(pool)
+	remindersHandler := reminders.NewHandler(remindersRepo)
+
+	// Goals / OKRs.
+	goalsRepo := goals.NewRepository(pool)
+	goalsSvc := goals.NewService(goalsRepo)
+	goalsHandler := goals.NewHandler(goalsSvc)
+
+	// Habits.
+	habitsRepo := habits.NewRepository(pool)
+	habitsSvc := habits.NewService(habitsRepo)
+	habitsHandler := habits.NewHandler(habitsSvc)
+
+	// Personal dashboard.
+	dashboardSvc := dashboard.NewService(pool, habitsSvc)
+	dashboardHandler := dashboard.NewHandler(dashboardSvc)
+
+	// Notes / Docs.
+	notesRepo := notes.NewRepository(pool)
+	notesSvc := notes.NewService(notesRepo, sseBroker)
+	notesHandler := notes.NewHandler(notesSvc)
+
+	// Global search.
+	searchSvc := search.NewService(pool)
+	searchHandler := search.NewHandler(searchSvc)
+
+	// Web push + unified notification delivery (email / web push / chat).
+	webpushRepo := webpush.NewRepository(pool)
+	webpushSvc := webpush.NewService(webpushRepo, webpush.Config{
+		PublicKey:  cfg.VAPIDPublicKey,
+		PrivateKey: cfg.VAPIDPrivateKey,
+		Subject:    cfg.VAPIDSubject,
+	})
+	webpushHandler := webpush.NewHandler(webpushSvc)
+	notifSvc.SetDeliverers(emailClient, webpushSvc, cfg.FrontendURL)
+
 	// Groq AI.
 	var groqHandler *groq.Handler
 	if cfg.GroqAPIKey != "" {
@@ -226,7 +293,9 @@ func run() error {
 		projectsHandler, timeHandler, sprintsHandler, templatesHandler,
 		cfHandler, watchersHandler, sfHandler, apiTokensHandler, totpHandler,
 		webhooksHandler, githubHandler, sharingHandler, pomodoroHandler,
-		groqHandler, apiTokensSvc,
+		groqHandler, apiTokensSvc, webpushHandler, notesHandler, searchHandler,
+		habitsHandler, dashboardHandler, goalsHandler, remindersHandler,
+		automationsHandler, inboxHandler, calendarSyncHandler,
 	)
 
 	srv := &http.Server{

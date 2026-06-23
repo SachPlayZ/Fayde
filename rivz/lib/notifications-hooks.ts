@@ -62,6 +62,18 @@ export function useMarkRead() {
   });
 }
 
+export function useSnoozeNotification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, until }: { id: string; until: string }) =>
+      api.post<void>(`/notifications/${id}/snooze`, { until }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
+    },
+  });
+}
+
 export function useMarkAllRead() {
   const qc = useQueryClient();
   return useMutation({

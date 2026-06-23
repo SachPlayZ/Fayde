@@ -76,7 +76,7 @@ func toPgx5URL(u string) string {
 
 func newService() *auth.Service {
 	repo := auth.NewRepository(testPool)
-	return auth.NewService(repo, "test-secret-key-for-testing-only")
+	return auth.NewService(repo, "test-secret-key-for-testing-only", nil, "http://localhost:3000")
 }
 
 func TestSignupLoginFlow(t *testing.T) {

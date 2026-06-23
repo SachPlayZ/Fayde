@@ -2,7 +2,7 @@
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { startOfDay, addDays, isSameDay, isBefore, isAfter, parseISO } from "date-fns";
-import { useTasks, useBulkUpdateTasks, useBulkDeleteTasks } from "@/lib/tasks-hooks";
+import { useTasks, useBulkUpdateTasks, useBulkDeleteTasks, useUpdateTask } from "@/lib/tasks-hooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +26,7 @@ import { TaskForm } from "./TaskForm";
 import { Pagination } from "./Pagination";
 import { KanbanView } from "./KanbanView";
 import { GanttView } from "./GanttView";
+import { CalendarView } from "./CalendarView";
 import { WeeklyPlanner } from "./WeeklyPlanner";
 import { ViewToggle } from "./ViewToggle";
 import type { View as DisplayViewType } from "./ViewToggle";
@@ -90,6 +91,7 @@ export function TasksPageClient() {
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const bulkUpdate = useBulkUpdateTasks();
+  const updateTask = useUpdateTask();
   const bulkDelete = useBulkDeleteTasks();
 
   if (prevSearch !== search) {
@@ -481,6 +483,20 @@ export function TasksPageClient() {
             tasks={displayTasks}
             onTaskClick={(task) => router.push(`/tasks/${task.id}`)}
             onUpdateDueDate={() => {}}
+          />
+        ) : displayView === "calendar" && list === "all" ? (
+          <CalendarView
+            tasks={displayTasks}
+            onTaskClick={(task) => router.push(`/tasks/${task.id}`)}
+            onReschedule={(taskId, date) => {
+              updateTask.mutate(
+                { id: taskId, due_date: new Date(date + "T12:00:00").toISOString() },
+                {
+                  onSuccess: () => toast.success("Rescheduled"),
+                  onError: () => toast.error("Failed to reschedule"),
+                }
+              );
+            }}
           />
         ) : (
           <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500">
