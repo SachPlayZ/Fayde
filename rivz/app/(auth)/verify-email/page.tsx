@@ -68,7 +68,7 @@ function VerifyWithToken({ token }: { token: string }) {
 
 function RequestResend() {
   const [email, setEmail] = useState("");
-  const { mutate: resend, isPending, isSuccess } = useResendVerification();
+  const { mutate: resend, isPending } = useResendVerification();
 
   const handleResend = () => {
     if (!email) return;

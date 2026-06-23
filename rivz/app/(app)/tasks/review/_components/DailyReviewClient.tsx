@@ -136,18 +136,19 @@ function ReviewTaskCard({
 
 export function DailyReviewClient() {
   const { data } = useTasks({ limit: 200 });
-  const tasks = data?.data ?? [];
+  const tasks = data?.data;
 
   const today = startOfDay(new Date());
 
   const { overdue, todayTasks } = useMemo(() => {
-    const overdue = tasks.filter(
+    const list = tasks ?? [];
+    const overdue = list.filter(
       (t) =>
         t.due_date &&
         isBefore(parseISO(t.due_date), today) &&
         t.status !== "done"
     );
-    const todayTasks = tasks.filter(
+    const todayTasks = list.filter(
       (t) => t.due_date && isSameDay(parseISO(t.due_date), today)
     );
     return { overdue, todayTasks };

@@ -2,6 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { api } from "./api";
+import type { DashboardSummary } from "./dashboard-hooks";
 
 export type Habit = {
   id: string;
@@ -68,7 +69,7 @@ export function useToggleHabit() {
       // Snapshot the previous values
       const previousLogs = qc.getQueriesData<HabitLog[]>({ queryKey: ["habit-logs", id] });
       const previousHabits = qc.getQueryData<Habit[]>(["habits"]);
-      const previousDashboard = qc.getQueryData<any>(["dashboard"]);
+      const previousDashboard = qc.getQueryData<DashboardSummary>(["dashboard"]);
 
       // Optimistically update the logs queries
       qc.setQueriesData<HabitLog[]>({ queryKey: ["habit-logs", id] }, (old) => {
@@ -113,7 +114,7 @@ export function useToggleHabit() {
 
       // Optimistically update the dashboard habits list
       if (previousDashboard) {
-        qc.setQueryData<any>(["dashboard"], (old: any) => {
+        qc.setQueryData<DashboardSummary>(["dashboard"], (old) => {
           if (!old || !old.habits) return old;
           return {
             ...old,

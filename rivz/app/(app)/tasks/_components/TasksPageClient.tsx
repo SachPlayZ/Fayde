@@ -231,11 +231,14 @@ export function TasksPageClient() {
           filtered = all;
       }
     }
+    if (sort === "sort_order") {
+      return [...filtered];
+    }
     return [...filtered].sort(
       (a, b) => (STATUS_ORDER[a.status] ?? 1) - (STATUS_ORDER[b.status] ?? 1)
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, focusMode, list]);
+  }, [data, focusMode, list, sort]);
 
   const displayTotal = isSmartView || isFocused ? displayTasks.length : (data?.total ?? 0);
 

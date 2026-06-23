@@ -1026,9 +1026,13 @@ function ProfileTab() {
 
   useEffect(() => {
     if (me) {
-      setDisplayName(me.display_name ?? "");
-      setAvatarUrl(me.avatar_url ?? "");
-      setDirty(false);
+      const dn = me.display_name ?? "";
+      const au = me.avatar_url ?? "";
+      Promise.resolve().then(() => {
+        setDisplayName(dn);
+        setAvatarUrl(au);
+        setDirty(false);
+      });
     }
   }, [me]);
 

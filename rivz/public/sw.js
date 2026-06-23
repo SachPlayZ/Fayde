@@ -26,7 +26,7 @@ self.addEventListener("push", (e) => {
   let data = {};
   try {
     data = e.data ? e.data.json() : {};
-  } catch (_) {
+  } catch {
     data = { title: "Fayde", body: e.data ? e.data.text() : "" };
   }
   const title = data.title || "Fayde";

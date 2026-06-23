@@ -256,14 +256,25 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 	}
 	offset := (p.Page - 1) * p.Limit
 
+	orderBy := fmt.Sprintf("t.%s %s NULLS LAST", col, order)
+	if col != "sort_order" {
+		orderBy = fmt.Sprintf(`CASE t.status::text
+			WHEN 'in_progress' THEN 1
+			WHEN 'todo' THEN 2
+			WHEN 'done' THEN 3
+			WHEN 'failed' THEN 4
+			ELSE 5
+		END ASC, %s`, orderBy)
+	}
+
 	q := fmt.Sprintf(`
 		SELECT %s, COUNT(*) OVER() AS total_count
 		FROM tasks t
 		LEFT JOIN users a ON a.id=t.assignee_id
 		LEFT JOIN projects p ON p.id=t.project_id
 		WHERE %s
-		ORDER BY t.%s %s NULLS LAST
-		LIMIT $%d OFFSET $%d`, taskSelect, where, col, order, idx, idx+1)
+		ORDER BY %s
+		LIMIT $%d OFFSET $%d`, taskSelect, where, orderBy, idx, idx+1)
 	args = append(args, p.Limit, offset)
 
 	rows, err := r.pool.Query(ctx, q, args...)

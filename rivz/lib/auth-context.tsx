@@ -69,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const stored = localStorage.getItem("token");
     if (!stored) {
-      setLoading(false);
+      Promise.resolve().then(() => setLoading(false));
       return;
     }
     
