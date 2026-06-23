@@ -39,7 +39,7 @@ function SprintCard({
   );
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="rounded-xl border border-border bg-card overflow-hidden hover:-translate-y-0.5 hover:shadow-md hover:border-border/80 transition-all duration-300">
       <div className="flex items-start gap-3 px-4 py-4">
         <div className="flex-1 min-w-0 flex flex-col gap-1.5">
           <div className="flex items-center gap-2 flex-wrap">

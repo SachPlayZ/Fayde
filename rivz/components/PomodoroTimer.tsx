@@ -119,7 +119,7 @@ export function PomodoroTimer() {
   return (
     <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
       {open && (
-        <div className="w-64 rounded-xl border border-border bg-background shadow-xl p-4 flex flex-col gap-3">
+        <div className="w-64 rounded-xl border border-border bg-background shadow-xl p-4 flex flex-col gap-3 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
           <div className="flex items-center justify-between">
             <span className="text-sm font-semibold flex items-center gap-1.5">
               <Timer className="size-4 text-rose-500" />

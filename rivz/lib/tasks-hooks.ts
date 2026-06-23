@@ -105,9 +105,14 @@ export function useCreateTask() {
         due_date: newTask.due_date ?? null,
         ...newTask,
       };
-      qc.setQueriesData<TasksResponse>({ queryKey: ["tasks"] }, (old) =>
-        old ? { ...old, data: [optimistic, ...old.data], total: old.total + 1 } : old
-      );
+      qc.setQueriesData<TasksResponse>({ queryKey: ["tasks"] }, (old) => {
+        if (!old || !Array.isArray((old as any).data)) return old;
+        return {
+          ...old,
+          data: [optimistic, ...old.data],
+          total: old.total + 1,
+        };
+      });
       return { prev };
     },
     onError: (_err, _vars, ctx) => {
@@ -127,7 +132,7 @@ export function useUpdateTask() {
       const prev = qc.getQueriesData<TasksResponse>({ queryKey: ["tasks"] });
       const prevSingle = qc.getQueryData<Task>(["tasks", updated.id]);
       qc.setQueriesData<TasksResponse>({ queryKey: ["tasks"] }, (old) => {
-        if (!old) return old;
+        if (!old || !Array.isArray((old as any).data)) return old;
         return {
           ...old,
           data: old.data.map((t) =>
@@ -156,7 +161,7 @@ export function useDeleteTask() {
       await qc.cancelQueries({ queryKey: ["tasks"] });
       const prev = qc.getQueriesData<TasksResponse>({ queryKey: ["tasks"] });
       qc.setQueriesData<TasksResponse>({ queryKey: ["tasks"] }, (old) => {
-        if (!old) return old;
+        if (!old || !Array.isArray((old as any).data)) return old;
         return {
           ...old,
           data: old.data.filter((t) => t.id !== id),

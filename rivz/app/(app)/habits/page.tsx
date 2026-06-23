@@ -50,7 +50,7 @@ function DayHeaders() {
   );
 }
 
-function HabitRow({ habit }: { habit: Habit }) {
+function HabitRow({ habit, index }: { habit: Habit; index: number }) {
   const toggle = useToggleHabit();
   const del = useDeleteHabit();
   const from = format(subDays(today, 6), "yyyy-MM-dd");
@@ -60,7 +60,10 @@ function HabitRow({ habit }: { habit: Habit }) {
   const color = habit.color ?? "#22c55e";
 
   return (
-    <div className="flex items-center gap-4 px-5 py-4">
+    <div
+      className="flex items-center gap-4 px-5 py-4 hover:bg-muted/30 transition-colors animate-in fade-in-0 slide-in-from-bottom-1 duration-300"
+      style={{ animationDelay: `${index * 40}ms`, animationFillMode: "both" }}
+    >
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <span className="size-2.5 rounded-full shrink-0" style={{ background: color }} />
@@ -184,8 +187,8 @@ export default function HabitsPage() {
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <DayHeaders />
           <div className="divide-y divide-border">
-            {habits!.map((h) => (
-              <HabitRow key={h.id} habit={h} />
+            {habits!.map((h, i) => (
+              <HabitRow key={h.id} habit={h} index={i} />
             ))}
           </div>
         </div>

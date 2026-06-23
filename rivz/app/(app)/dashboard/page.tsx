@@ -36,14 +36,19 @@ function Stat({
   label,
   value,
   tint,
+  delay,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
   tint: string;
+  delay: number;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div
+      className="rounded-xl border border-border bg-card p-4 hover:-translate-y-0.5 hover:shadow-md hover:border-border/80 transition-all duration-300 animate-in fade-in-0 slide-in-from-bottom-2"
+      style={{ animationDelay: `${delay * 60}ms`, animationFillMode: "both" }}
+    >
       <div className={cn("flex items-center gap-1.5 text-xs font-medium", tint)}>
         {icon}
         {label}
@@ -83,14 +88,19 @@ function Panel({
   icon,
   href,
   children,
+  delay = 0,
 }: {
   title: string;
   icon: React.ReactNode;
   href: string;
   children: React.ReactNode;
+  delay?: number;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div
+      className="rounded-xl border border-border bg-card overflow-hidden hover:-translate-y-0.5 hover:shadow-md hover:border-border/80 transition-all duration-300 animate-in fade-in-0 slide-in-from-bottom-3"
+      style={{ animationDelay: `${delay * 80}ms`, animationFillMode: "both" }}
+    >
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
         <span className="flex items-center gap-1.5 text-sm font-semibold">
           {icon}
@@ -324,23 +334,23 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Stat icon={<Sun className="size-3.5" />} label="Due today" value={data.due_today.length} tint="text-amber-500" />
-        <Stat icon={<AlertCircle className="size-3.5" />} label="Overdue" value={data.overdue.length} tint="text-rose-500" />
-        <Stat icon={<CheckCircle2 className="size-3.5" />} label="Done this week" value={data.completed_this_week} tint="text-emerald-500" />
-        <Stat icon={<Clock className="size-3.5" />} label="Tracked this week" value={`${hours}h ${mins}m`} tint="text-blue-500" />
+        <Stat icon={<Sun className="size-3.5" />} label="Due today" value={data.due_today.length} tint="text-amber-500" delay={0} />
+        <Stat icon={<AlertCircle className="size-3.5" />} label="Overdue" value={data.overdue.length} tint="text-rose-500" delay={1} />
+        <Stat icon={<CheckCircle2 className="size-3.5" />} label="Done this week" value={data.completed_this_week} tint="text-emerald-500" delay={2} />
+        <Stat icon={<Clock className="size-3.5" />} label="Tracked this week" value={`${hours}h ${mins}m`} tint="text-blue-500" delay={3} />
       </div>
 
       <div className="grid md:grid-cols-2 gap-3">
-        <Panel title="Due today" icon={<Sun className="size-4 text-amber-500" />} href="/tasks?list=today">
+        <Panel title="Due today" icon={<Sun className="size-4 text-amber-500" />} href="/tasks?list=today" delay={1}>
           <TaskList tasks={data.due_today} empty="Nothing due today 🎉" />
         </Panel>
-        <Panel title="Overdue" icon={<AlertCircle className="size-4 text-rose-500" />} href="/tasks?list=overdue">
+        <Panel title="Overdue" icon={<AlertCircle className="size-4 text-rose-500" />} href="/tasks?list=overdue" delay={2}>
           <TaskList tasks={data.overdue} empty="No overdue tasks" />
         </Panel>
-        <Panel title="Upcoming" icon={<CalendarClock className="size-4 text-violet-500" />} href="/tasks?list=upcoming">
+        <Panel title="Upcoming" icon={<CalendarClock className="size-4 text-violet-500" />} href="/tasks?list=upcoming" delay={3}>
           <TaskList tasks={data.upcoming} empty="Nothing scheduled" />
         </Panel>
-        <Panel title="Habits" icon={<Flame className="size-4 text-orange-500" />} href="/habits">
+        <Panel title="Habits" icon={<Flame className="size-4 text-orange-500" />} href="/habits" delay={4}>
           {data.habits.length === 0 ? (
             <Link href="/habits" className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground hover:text-foreground justify-center">
               <Plus className="size-4" /> Start a habit
@@ -348,7 +358,7 @@ export default function DashboardPage() {
           ) : (
             <div className="divide-y divide-border">
               {data.habits.slice(0, 6).map((h) => (
-                <div key={h.id} className="flex items-center gap-2 px-4 py-2.5 text-sm">
+                <div key={h.id} className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-muted/30 transition-colors">
                   <span className="size-2 rounded-full shrink-0" style={{ background: h.color ?? "#22c55e" }} />
                   <span className="truncate flex-1">{h.name}</span>
                   <span className={cn("flex items-center gap-1 text-xs", h.done_today ? "text-emerald-500" : "text-muted-foreground")}>

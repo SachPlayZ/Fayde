@@ -75,8 +75,8 @@ function DocsInner() {
           onClick={() => setSelectedId(n.id)}
           style={{ paddingLeft: 8 + depth * 14 }}
           className={cn(
-            "group flex items-center gap-1.5 w-full text-left rounded-lg pr-2 py-1.5 text-sm hover:bg-muted transition-colors",
-            selectedId === n.id && "bg-muted font-medium"
+            "group flex items-center gap-1.5 w-full text-left rounded-lg pr-2 py-1.5 text-sm hover:bg-muted transition-all duration-200 animate-in fade-in-0 duration-200",
+            selectedId === n.id ? "bg-muted font-medium shadow-xs" : "text-muted-foreground hover:text-foreground"
           )}
         >
           {n.icon ? (
@@ -132,8 +132,8 @@ function DocsInner() {
       {/* Editor */}
       <main className="flex-1 rounded-xl border border-border bg-card overflow-hidden flex flex-col">
         {selected ? (
-          <>
-            <NoteEditor key={selected.id} note={selected} />
+          <div key={selected.id} className="flex-1 flex flex-col overflow-hidden animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+            <NoteEditor note={selected} />
             {(backlinks?.length ?? 0) > 0 && (
               <div className="border-t border-border px-8 py-3">
                 <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-2">
@@ -153,7 +153,7 @@ function DocsInner() {
                 </div>
               </div>
             )}
-          </>
+          </div>
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-muted-foreground">
             <FileText className="size-10" />

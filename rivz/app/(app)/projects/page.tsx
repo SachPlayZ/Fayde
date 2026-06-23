@@ -173,7 +173,7 @@ export default function ProjectsPage() {
             <div
               key={project.id}
               onClick={() => router.push(`/tasks?project_id=${project.id}`)}
-              className="group relative flex flex-col gap-3 rounded-xl border border-border bg-card p-4 cursor-pointer hover:border-border/80 hover:bg-card/80 transition-all duration-150 animate-in fade-in-0 slide-in-from-bottom-3 duration-400"
+              className="group relative flex flex-col gap-3 rounded-xl border border-border bg-card p-4 cursor-pointer hover:-translate-y-0.5 hover:shadow-md hover:border-border/80 transition-all duration-300 animate-in fade-in-0 slide-in-from-bottom-3 duration-400"
               style={{ animationDelay: `${i * 40}ms` }}
             >
               <div className="flex items-start justify-between gap-2">

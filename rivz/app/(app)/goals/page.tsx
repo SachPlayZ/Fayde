@@ -113,7 +113,7 @@ function GoalCard({ goal }: { goal: Goal }) {
   };
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
+    <div className="rounded-xl border border-border bg-card overflow-hidden hover:-translate-y-0.5 hover:shadow-md hover:border-border/80 transition-all duration-300">
       <div className="flex items-center gap-4 p-4">
         <ProgressRing value={goal.progress} />
         <button onClick={() => setOpen((v) => !v)} className="flex-1 min-w-0 text-left">
@@ -247,8 +247,14 @@ export default function GoalsPage() {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {goals!.map((g) => (
-            <GoalCard key={g.id} goal={g} />
+          {goals!.map((g, i) => (
+            <div
+              key={g.id}
+              className="animate-in fade-in-0 slide-in-from-bottom-2 duration-400"
+              style={{ animationDelay: `${i * 50}ms`, animationFillMode: "both" }}
+            >
+              <GoalCard goal={g} />
+            </div>
           ))}
         </div>
       )}
