@@ -10,8 +10,8 @@ const words = [
   { text: "more.", muted: false },
 ];
 
-const angles = [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
-const waves = [0, 1, 2, 3, 4];
+const RING_COUNT = 4;
+const RING_DURATION = 4.5;
 
 export function HeroSection() {
   const reduce = useReducedMotion();
@@ -90,92 +90,92 @@ export function HeroSection() {
           </div>
         </div>
 
-        {/* Right Column: Logo with Radial Ripple Dots Animation */}
+        {/* Right Column: Logo */}
         <div className="relative flex-shrink-0 w-full max-w-[380px] sm:max-w-[450px] aspect-square flex items-center justify-center select-none overflow-visible">
-          {/* Pulsing Background Glow */}
-          <motion.div
-            animate={{
-              scale: [0.9, 1.1, 0.9],
-              opacity: [0.15, 0.28, 0.15],
-            }}
-            transition={{
-              duration: 5,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-            className="absolute size-[280px] rounded-full bg-white/5 blur-3xl"
-          />
 
-          {/* Staggered radial waves */}
+          {/* Layered ambient glow — two breathing radial gradients */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <motion.div
+              animate={{ scale: [1, 1.18, 1], opacity: [0.7, 1, 0.7] }}
+              transition={{ duration: 7, repeat: Infinity, ease: [0.45, 0, 0.55, 1] }}
+              className="absolute size-[200px] rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 45%, transparent 70%)" }}
+            />
+            <motion.div
+              animate={{ scale: [1.12, 0.94, 1.12], opacity: [0.35, 0.6, 0.35] }}
+              transition={{ duration: 10, repeat: Infinity, ease: [0.45, 0, 0.55, 1], delay: 2 }}
+              className="absolute size-[360px] rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(255,255,255,0.04) 0%, transparent 60%)" }}
+            />
+          </div>
+
+          {/* Clean concentric ring pulses */}
           {!reduce &&
-            waves.map((waveIndex) => {
-              const delay = waveIndex * 0.8;
-              return (
-                <div key={waveIndex} className="absolute inset-0 flex items-center justify-center">
-                  {/* Expanding Dashed Ring */}
-                  <motion.div
-                    initial={{ scale: 0.2, opacity: 0 }}
-                    animate={{
-                      scale: [0.2, 1.8, 3.2],
-                      opacity: [0, 0.3, 0],
-                    }}
-                    transition={{
-                      duration: 4.0,
-                      repeat: Infinity,
-                      delay: delay,
-                      ease: "easeOut",
-                    }}
-                    className="absolute size-[160px] rounded-full border border-dashed border-white/20 pointer-events-none"
-                  />
+            Array.from({ length: RING_COUNT }).map((_, i) => (
+              <div key={i} className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <motion.div
+                  className="rounded-full"
+                  style={{ width: 160, height: 160, border: "1px solid rgba(255,255,255,0.45)" }}
+                  initial={{ scale: 0.35, opacity: 0 }}
+                  animate={{ scale: [0.35, 2.4], opacity: [0, 0.22, 0.14, 0] }}
+                  transition={{
+                    duration: RING_DURATION,
+                    repeat: Infinity,
+                    delay: i * (RING_DURATION / RING_COUNT),
+                    ease: [0.25, 0.46, 0.45, 0.94],
+                  }}
+                />
+              </div>
+            ))}
 
-                  {/* Radiating Angle Dots originating from center */}
-                  {angles.map((angle) => {
-                    const x = Math.cos((angle * Math.PI) / 180);
-                    const y = Math.sin((angle * Math.PI) / 180);
-                    return (
-                      <motion.div
-                        key={angle}
-                        initial={{ x: x * 15, y: y * 15, opacity: 0, scale: 0.3 }}
-                        animate={{
-                          x: x * 260,
-                          y: y * 260,
-                          opacity: [0, 0.8, 0.8, 0],
-                          scale: [0.3, 1, 0.6, 0.1],
-                        }}
-                        transition={{
-                          duration: 4.0,
-                          repeat: Infinity,
-                          delay: delay,
-                          ease: "easeOut",
-                        }}
-                        className="absolute size-2 rounded-full bg-white/40 shadow-[0_0_6px_rgba(255,255,255,0.4)] pointer-events-none"
-                      />
-                    );
-                  })}
-                </div>
-              );
-            })}
+          {/* Slow-rotating arc — outer orbital */}
+          {!reduce && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 22, repeat: Infinity, ease: "linear" }}
+                className="rounded-full"
+                style={{
+                  width: 290,
+                  height: 290,
+                  border: "1px solid transparent",
+                  borderTopColor: "rgba(255,255,255,0.09)",
+                  borderRightColor: "rgba(255,255,255,0.04)",
+                }}
+              />
+            </div>
+          )}
 
-          {/* Floating Logo Container (Enlarged) */}
+          {/* Counter-rotating arc — inner orbital */}
+          {!reduce && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <motion.div
+                animate={{ rotate: -360 }}
+                transition={{ duration: 34, repeat: Infinity, ease: "linear" }}
+                className="rounded-full"
+                style={{
+                  width: 230,
+                  height: 230,
+                  border: "1px solid transparent",
+                  borderBottomColor: "rgba(255,255,255,0.07)",
+                  borderLeftColor: "rgba(255,255,255,0.03)",
+                }}
+              />
+            </div>
+          )}
+
+          {/* Floating Logo Container */}
           <motion.div
             initial={reduce ? false : { opacity: 0, scale: 0.8 }}
             animate={
               reduce
                 ? { y: [-6, 6, -6] }
-                : {
-                    opacity: 1,
-                    scale: 1,
-                    y: [-8, 8, -8],
-                  }
+                : { opacity: 1, scale: 1, y: [-8, 8, -8] }
             }
             transition={{
-              opacity: { duration: 0.6, ease: "easeOut" },
-              scale: { duration: 0.6, ease: "easeOut" },
-              y: {
-                duration: 6,
-                repeat: Infinity,
-                ease: "easeInOut",
-              },
+              opacity: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
+              scale: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
+              y: { duration: 6, repeat: Infinity, ease: [0.45, 0, 0.55, 1] },
             }}
             className="relative z-10 size-44 sm:size-56 rounded-[3rem] bg-zinc-950/80 border border-white/10 p-6 sm:p-8 shadow-[0_0_50px_rgba(0,0,0,0.8),_0_0_30px_rgba(255,255,255,0.03)] flex items-center justify-center backdrop-blur-xl"
           >
