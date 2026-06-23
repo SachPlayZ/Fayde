@@ -1,6 +1,9 @@
 package tasks
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Tag is a lightweight tag summary embedded in Task responses.
 type Tag struct {
@@ -51,7 +54,6 @@ type CreateRequest struct {
 }
 
 // UpdateRequest contains the fields for a partial task update.
-// Pointer fields are only updated when non-nil.
 type UpdateRequest struct {
 	Title         *string    `json:"title"          validate:"omitempty,min=1"`
 	Description   *string    `json:"description"`
@@ -64,6 +66,40 @@ type UpdateRequest struct {
 	SortOrder     *float64   `json:"sort_order"`
 	EffortPoints  *int       `json:"effort_points"`
 	ProjectID     *string    `json:"project_id"`
+
+	presentFields map[string]bool
+}
+
+// UnmarshalJSON custom unmarshaler to track explicitly set JSON keys.
+func (req *UpdateRequest) UnmarshalJSON(data []byte) error {
+	type Alias UpdateRequest
+	aux := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(req),
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+
+	req.presentFields = make(map[string]bool)
+	for k := range m {
+		req.presentFields[k] = true
+	}
+	return nil
+}
+
+// IsPresent checks if a field was explicitly supplied in the JSON request.
+func (req UpdateRequest) IsPresent(field string) bool {
+	if req.presentFields == nil {
+		return false
+	}
+	return req.presentFields[field]
 }
 
 // ListParams describes filters, sorting, and pagination for listing tasks.

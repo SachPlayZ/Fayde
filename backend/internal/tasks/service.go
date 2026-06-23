@@ -354,8 +354,14 @@ func buildChanges(old *Task, req UpdateRequest) map[string][2]interface{} {
 	if req.Title != nil && *req.Title != old.Title {
 		changes["title"] = [2]interface{}{old.Title, *req.Title}
 	}
-	if req.Description != nil && *req.Description != old.Description {
-		changes["description"] = [2]interface{}{old.Description, *req.Description}
+	if req.IsPresent("description") {
+		var newDesc string
+		if req.Description != nil {
+			newDesc = *req.Description
+		}
+		if newDesc != old.Description {
+			changes["description"] = [2]interface{}{old.Description, newDesc}
+		}
 	}
 	if req.Status != nil && *req.Status != old.Status {
 		changes["status"] = [2]interface{}{old.Status, *req.Status}
@@ -363,7 +369,7 @@ func buildChanges(old *Task, req UpdateRequest) map[string][2]interface{} {
 	if req.Priority != nil && *req.Priority != old.Priority {
 		changes["priority"] = [2]interface{}{old.Priority, *req.Priority}
 	}
-	if req.DueDate != nil {
+	if req.IsPresent("due_date") {
 		oldDue := formatDueDate(old.DueDate)
 		newDue := formatDueDate(req.DueDate)
 		if oldDue != newDue {

@@ -328,9 +328,9 @@ func (r *pgRepository) UpdateTask(ctx context.Context, id, userID string, req Up
 		args = append(args, *req.Title)
 		argIdx++
 	}
-	if req.Description != nil {
+	if req.IsPresent("description") {
 		sets = append(sets, fmt.Sprintf("description = $%d", argIdx))
-		args = append(args, *req.Description)
+		args = append(args, req.Description)
 		argIdx++
 	}
 	if req.Status != nil {
@@ -343,24 +343,24 @@ func (r *pgRepository) UpdateTask(ctx context.Context, id, userID string, req Up
 		args = append(args, *req.Priority)
 		argIdx++
 	}
-	if req.DueDate != nil {
+	if req.IsPresent("due_date") {
 		sets = append(sets, fmt.Sprintf("due_date = $%d", argIdx))
 		args = append(args, req.DueDate)
 		argIdx++
 	}
-	if req.Recurrence != nil {
+	if req.IsPresent("recurrence") {
 		sets = append(sets, fmt.Sprintf("recurrence = $%d", argIdx))
-		args = append(args, *req.Recurrence)
+		args = append(args, req.Recurrence)
 		argIdx++
 	}
-	if req.RecurrenceEnd != nil {
+	if req.IsPresent("recurrence_end") {
 		sets = append(sets, fmt.Sprintf("recurrence_end = $%d", argIdx))
 		args = append(args, req.RecurrenceEnd)
 		argIdx++
 	}
-	if req.AssigneeID != nil {
+	if req.IsPresent("assignee_id") {
 		sets = append(sets, fmt.Sprintf("assignee_id = $%d", argIdx))
-		args = append(args, *req.AssigneeID)
+		args = append(args, req.AssigneeID)
 		argIdx++
 	}
 	if req.SortOrder != nil {
@@ -368,14 +368,14 @@ func (r *pgRepository) UpdateTask(ctx context.Context, id, userID string, req Up
 		args = append(args, *req.SortOrder)
 		argIdx++
 	}
-	if req.EffortPoints != nil {
+	if req.IsPresent("effort_points") {
 		sets = append(sets, fmt.Sprintf("effort_points = $%d", argIdx))
-		args = append(args, *req.EffortPoints)
+		args = append(args, req.EffortPoints)
 		argIdx++
 	}
-	if req.ProjectID != nil {
+	if req.IsPresent("project_id") {
 		sets = append(sets, fmt.Sprintf("project_id = $%d", argIdx))
-		args = append(args, *req.ProjectID)
+		args = append(args, req.ProjectID)
 		argIdx++
 	}
 
