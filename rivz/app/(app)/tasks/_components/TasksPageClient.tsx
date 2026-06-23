@@ -26,7 +26,7 @@ import { TaskForm } from "./TaskForm";
 import { Pagination } from "./Pagination";
 import { KanbanView } from "./KanbanView";
 import { GanttView } from "./GanttView";
-import { CalendarView } from "./CalendarView";
+import { CalendarView, getCalendarRange } from "./CalendarView";
 import { WeeklyPlanner } from "./WeeklyPlanner";
 import { ViewToggle } from "./ViewToggle";
 import type { View as DisplayViewType } from "./ViewToggle";
@@ -66,6 +66,10 @@ export function TasksPageClient() {
   const router = useRouter();
   const pathname = usePathname();
   const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [newTaskDate, setNewTaskDate] = useState<string | undefined>();
+  const [calendarRange, setCalendarRange] = useState<{ from: string; to: string }>(
+    () => getCalendarRange(new Date())
+  );
 
   const status = searchParams.get("status") ?? "";
   const search = searchParams.get("search") ?? "";
@@ -151,15 +155,17 @@ export function TasksPageClient() {
 
   const isSmartView = list !== "all";
   const isFocused = focusMode;
-  const fetchLimit = isSmartView || isFocused ? SMART_LIMIT : PAGE_LIMIT;
+  const isCalendarView = displayView === "calendar" && list === "all";
+  const fetchLimit = isSmartView || isFocused ? SMART_LIMIT : isCalendarView ? 500 : PAGE_LIMIT;
 
   const { data, isLoading } = useTasks({
     status: status || undefined,
     search: search || undefined,
     sort,
     order,
-    page: isSmartView || isFocused ? 1 : page,
+    page: isSmartView || isFocused || isCalendarView ? 1 : page,
     limit: fetchLimit,
+    ...(isCalendarView ? { due_date_from: calendarRange.from, due_date_to: calendarRange.to } : {}),
   });
 
   const today = startOfDay(new Date());
@@ -508,6 +514,11 @@ export function TasksPageClient() {
                 }
               );
             }}
+            onNewTask={(date) => {
+              setNewTaskDate(date);
+              setNewTaskOpen(true);
+            }}
+            onRangeChange={(from, to) => setCalendarRange({ from, to })}
           />
         ) : (
           <div className="animate-in fade-in-0 slide-in-from-bottom-2 duration-500">
@@ -553,8 +564,8 @@ export function TasksPageClient() {
           </div>
         )}
 
-        {/* Pagination — only in "all" non-smart view */}
-        {!isLoading && !isSmartView && data && data.total > PAGE_LIMIT && (
+        {/* Pagination — only in "all" non-smart, non-calendar view */}
+        {!isLoading && !isSmartView && !isCalendarView && data && data.total > PAGE_LIMIT && (
           <Pagination page={page} total={data.total} limit={PAGE_LIMIT} />
         )}
 
@@ -594,7 +605,14 @@ export function TasksPageClient() {
           </div>
         )}
 
-        <TaskForm open={newTaskOpen} onOpenChange={setNewTaskOpen} />
+        <TaskForm
+          open={newTaskOpen}
+          onOpenChange={(o) => {
+            setNewTaskOpen(o);
+            if (!o) setNewTaskDate(undefined);
+          }}
+          defaultDate={newTaskDate}
+        />
       </div>
     </div>
   );

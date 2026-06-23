@@ -204,7 +204,11 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 	if p.Page < 1 {
 		p.Page = 1
 	}
-	if p.Limit < 1 || p.Limit > 100 {
+	maxLimit := 100
+	if p.DueDateFrom != nil || p.DueDateTo != nil {
+		maxLimit = 500
+	}
+	if p.Limit < 1 || p.Limit > maxLimit {
 		p.Limit = 20
 	}
 
@@ -228,6 +232,16 @@ func (r *pgRepository) ListTasks(ctx context.Context, userID string, p ListParam
 	if p.ProjectID != "" {
 		conds = append(conds, fmt.Sprintf("t.project_id = $%d", idx))
 		args = append(args, p.ProjectID)
+		idx++
+	}
+	if p.DueDateFrom != nil {
+		conds = append(conds, fmt.Sprintf("t.due_date >= $%d", idx))
+		args = append(args, *p.DueDateFrom)
+		idx++
+	}
+	if p.DueDateTo != nil {
+		conds = append(conds, fmt.Sprintf("t.due_date <= $%d", idx))
+		args = append(args, *p.DueDateTo)
 		idx++
 	}
 

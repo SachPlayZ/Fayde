@@ -41,6 +41,8 @@ export type ListParams = {
   page?: number;
   limit?: number;
   project_id?: string;
+  due_date_from?: string; // ISO 8601
+  due_date_to?: string;   // ISO 8601
 };
 
 function buildQuery(params: ListParams) {
@@ -52,6 +54,8 @@ function buildQuery(params: ListParams) {
   if (params.page) q.set("page", String(params.page));
   if (params.limit) q.set("limit", String(params.limit));
   if (params.project_id) q.set("project_id", params.project_id);
+  if (params.due_date_from) q.set("due_date_from", params.due_date_from);
+  if (params.due_date_to) q.set("due_date_to", params.due_date_to);
   return q.toString();
 }
 

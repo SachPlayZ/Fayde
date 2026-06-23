@@ -104,13 +104,15 @@ func (req UpdateRequest) IsPresent(field string) bool {
 
 // ListParams describes filters, sorting, and pagination for listing tasks.
 type ListParams struct {
-	Status    string
-	Search    string
-	Sort      string
-	Order     string
-	Page      int
-	Limit     int
-	ProjectID string
+	Status      string
+	Search      string
+	Sort        string
+	Order       string
+	Page        int
+	Limit       int
+	ProjectID   string
+	DueDateFrom *time.Time
+	DueDateTo   *time.Time
 }
 
 // BulkUpdateRequest updates status/priority for multiple tasks.

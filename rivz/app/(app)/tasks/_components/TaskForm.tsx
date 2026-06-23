@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, parseISO, formatDistanceToNow, addDays, addWeeks, startOfDay } from "date-fns";
@@ -97,6 +97,7 @@ type TaskFormProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task?: Task;
+  defaultDate?: string; // yyyy-MM-dd
 };
 
 const statusIcon: Record<string, React.ReactNode> = {
@@ -212,14 +213,24 @@ function SortableSubtaskItem({
   );
 }
 
-export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
+export function TaskForm({ open, onOpenChange, task, defaultDate }: TaskFormProps) {
   const isEdit = !!task;
   const { user } = useAuth();
   const createTask = useCreateTask();
   const updateTask = useUpdateTask();
 
-  const initialDate = task?.due_date ? parseISO(task.due_date) : undefined;
+  const initialDate = task?.due_date ? parseISO(task.due_date) : defaultDate ? parseISO(defaultDate) : undefined;
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(initialDate);
+
+  useEffect(() => {
+    if (open && !task && defaultDate) {
+      const d = parseISO(defaultDate);
+      setSelectedDate(d);
+      setValue("due_date", defaultDate);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, defaultDate]);
+
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [recEndCalendarOpen, setRecEndCalendarOpen] = useState(false);
   const [nlDateInput, setNlDateInput] = useState("");
@@ -269,7 +280,7 @@ export function TaskForm({ open, onOpenChange, task }: TaskFormProps) {
       description: task?.description ?? "",
       status: task?.status ?? "todo",
       priority: task?.priority ?? "medium",
-      due_date: task?.due_date ? task.due_date.slice(0, 10) : null,
+      due_date: task?.due_date ? task.due_date.slice(0, 10) : defaultDate ?? null,
       recurrence: (task?.recurrence as TaskInput["recurrence"]) ?? null,
       recurrence_end: task?.recurrence_end ? task.recurrence_end.slice(0, 10) : null,
       assignee_id: task?.assignee_id ?? null,

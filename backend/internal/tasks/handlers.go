@@ -82,6 +82,16 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		Limit:     limit,
 		ProjectID: q.Get("project_id"),
 	}
+	if s := q.Get("due_date_from"); s != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			p.DueDateFrom = &t
+		}
+	}
+	if s := q.Get("due_date_to"); s != "" {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			p.DueDateTo = &t
+		}
+	}
 
 	result, err := h.svc.ListTasks(r.Context(), userID, p)
 	if err != nil {

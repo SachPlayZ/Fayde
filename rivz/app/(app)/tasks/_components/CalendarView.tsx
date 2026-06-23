@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   startOfMonth,
   endOfMonth,
@@ -22,7 +22,7 @@ import {
   useSensors,
   type DragEndEvent,
 } from "@dnd-kit/core";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Task } from "@/lib/tasks-hooks";
@@ -44,7 +44,9 @@ function TaskChip({ task, onClick }: { task: Task; onClick: () => void }) {
       className={cn(
         "block w-full truncate rounded border-l-2 bg-card px-1.5 py-0.5 text-left text-[11px] shadow-sm hover:bg-muted transition-colors",
         PRIORITY[task.priority] ?? "border-l-border",
-        task.status === "done" && "line-through opacity-60",
+        (task.status === "done" || task.status === "failed") && "line-through opacity-60",
+        task.status === "done" && "text-emerald-500",
+        task.status === "failed" && "text-rose-500",
         isDragging && "opacity-40"
       )}
       title={task.title}
@@ -59,31 +61,49 @@ function DayCell({
   monthAnchor,
   tasks,
   onTaskClick,
+  onNewTask,
 }: {
   day: Date;
   monthAnchor: Date;
   tasks: Task[];
   onTaskClick: (t: Task) => void;
+  onNewTask: (date: string) => void;
 }) {
+  const [hovered, setHovered] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: format(day, "yyyy-MM-dd") });
   const outside = !isSameMonth(day, monthAnchor);
+  const dateKey = format(day, "yyyy-MM-dd");
   return (
     <div
       ref={setNodeRef}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       className={cn(
-        "min-h-24 border-b border-r border-border p-1 flex flex-col gap-0.5",
+        "min-h-24 border-b border-r border-border p-1 flex flex-col gap-0.5 relative",
         outside && "bg-muted/30",
         isOver && "bg-primary/10 ring-1 ring-inset ring-primary"
       )}
     >
-      <span
-        className={cn(
-          "text-[11px] font-medium mb-0.5 self-end size-5 flex items-center justify-center rounded-full",
-          isToday(day) ? "bg-primary text-primary-foreground" : "text-muted-foreground"
-        )}
-      >
-        {format(day, "d")}
-      </span>
+      <div className="flex items-center justify-between mb-0.5">
+        <button
+          onClick={() => onNewTask(dateKey)}
+          className={cn(
+            "size-4 flex items-center justify-center rounded border border-dashed border-muted-foreground/40 text-muted-foreground/50 hover:border-primary/60 hover:text-primary transition-all duration-150",
+            hovered ? "opacity-100" : "opacity-0"
+          )}
+          title={`Add task on ${format(day, "MMM d")}`}
+        >
+          <Plus className="size-2.5" />
+        </button>
+        <span
+          className={cn(
+            "text-[11px] font-medium size-5 flex items-center justify-center rounded-full",
+            isToday(day) ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+          )}
+        >
+          {format(day, "d")}
+        </span>
+      </div>
       <div className="flex flex-col gap-0.5 overflow-hidden">
         {tasks.slice(0, 4).map((t) => (
           <TaskChip key={t.id} task={t} onClick={() => onTaskClick(t)} />
@@ -96,17 +116,34 @@ function DayCell({
   );
 }
 
+export function getCalendarRange(anchor: Date) {
+  const start = startOfWeek(startOfMonth(anchor), { weekStartsOn: 0 });
+  const end = endOfWeek(endOfMonth(anchor), { weekStartsOn: 0 });
+  return { from: start.toISOString(), to: end.toISOString() };
+}
+
 export function CalendarView({
   tasks,
   onTaskClick,
   onReschedule,
+  onNewTask,
+  onRangeChange,
 }: {
   tasks: Task[];
   onTaskClick: (t: Task) => void;
   onReschedule: (taskId: string, date: string) => void;
+  onNewTask: (date: string) => void;
+  onRangeChange?: (from: string, to: string) => void;
 }) {
   const [anchor, setAnchor] = useState(() => new Date());
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const handleNewTask = useCallback((date: string) => onNewTask(date), [onNewTask]);
+
+  useEffect(() => {
+    if (!onRangeChange) return;
+    const { from, to } = getCalendarRange(anchor);
+    onRangeChange(from, to);
+  }, [anchor, onRangeChange]);
 
   const days = useMemo(() => {
     const start = startOfWeek(startOfMonth(anchor), { weekStartsOn: 0 });
@@ -168,6 +205,7 @@ export function CalendarView({
                 monthAnchor={anchor}
                 tasks={byDay.get(format(day, "yyyy-MM-dd")) ?? []}
                 onTaskClick={onTaskClick}
+                onNewTask={handleNewTask}
               />
             ))}
           </div>
