@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "TAURI_BUILD=true pnpm dev",
-    "beforeBuildCommand": "TAURI_BUILD=true pnpm build"
+    "beforeDevCommand": "pnpm dev:tauri",
+    "beforeBuildCommand": "pnpm build:tauri"
   },
   "app": {
     "withGlobalTauri": true,
