@@ -75,7 +75,8 @@ func (h *OAuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Google OAuth not configured", http.StatusNotImplemented)
 		return
 	}
-	state := h.newState()
+	platform := r.URL.Query().Get("platform")
+	state := h.newState(platform)
 	http.Redirect(w, r, h.googleCfg.AuthCodeURL(state, oauth2.AccessTypeOnline), http.StatusFound)
 }
 
@@ -85,24 +86,25 @@ func (h *OAuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Google OAuth not configured", http.StatusNotImplemented)
 		return
 	}
-	if !h.verifyState(r.URL.Query().Get("state")) {
+	platform, ok := h.verifyState(r.URL.Query().Get("state"))
+	if !ok {
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
 	code := r.URL.Query().Get("code")
 	tok, err := h.googleCfg.Exchange(r.Context(), code)
 	if err != nil {
-		http.Redirect(w, r, h.frontendURL+"/login?error=oauth", http.StatusFound)
+		h.redirectWithError(w, r, platform)
 		return
 	}
 
 	info, err := fetchGoogleUserInfo(tok.AccessToken)
 	if err != nil || info.Email == "" {
-		http.Redirect(w, r, h.frontendURL+"/login?error=oauth", http.StatusFound)
+		h.redirectWithError(w, r, platform)
 		return
 	}
 
-	h.finishOAuth(w, r, info.Email, "google", info.ID, info.Name, info.Picture)
+	h.finishOAuth(w, r, info.Email, "google", info.ID, info.Name, info.Picture, platform)
 }
 
 // GitHubLogin redirects the user to GitHub's consent screen.
@@ -111,7 +113,8 @@ func (h *OAuthHandler) GitHubLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "GitHub OAuth not configured", http.StatusNotImplemented)
 		return
 	}
-	state := h.newState()
+	platform := r.URL.Query().Get("platform")
+	state := h.newState(platform)
 	http.Redirect(w, r, h.githubCfg.AuthCodeURL(state, oauth2.AccessTypeOnline), http.StatusFound)
 }
 
@@ -121,37 +124,117 @@ func (h *OAuthHandler) GitHubCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "GitHub OAuth not configured", http.StatusNotImplemented)
 		return
 	}
-	if !h.verifyState(r.URL.Query().Get("state")) {
+	platform, ok := h.verifyState(r.URL.Query().Get("state"))
+	if !ok {
 		http.Error(w, "invalid state", http.StatusBadRequest)
 		return
 	}
 	code := r.URL.Query().Get("code")
 	tok, err := h.githubCfg.Exchange(r.Context(), code)
 	if err != nil {
-		http.Redirect(w, r, h.frontendURL+"/login?error=oauth", http.StatusFound)
+		h.redirectWithError(w, r, platform)
 		return
 	}
 
 	email, id, name, avatarURL, err := fetchGitHubUserInfo(r.Context(), tok.AccessToken)
 	if err != nil || email == "" {
-		http.Redirect(w, r, h.frontendURL+"/login?error=oauth", http.StatusFound)
+		h.redirectWithError(w, r, platform)
 		return
 	}
 
-	h.finishOAuth(w, r, email, "github", id, name, avatarURL)
+	h.finishOAuth(w, r, email, "github", id, name, avatarURL, platform)
 }
 
 // finishOAuth upserts the user, issues a JWT, and redirects to the frontend callback page.
-func (h *OAuthHandler) finishOAuth(w http.ResponseWriter, r *http.Request, email, provider, providerID, displayName, avatarURL string) {
+func (h *OAuthHandler) finishOAuth(w http.ResponseWriter, r *http.Request, email, provider, providerID, displayName, avatarURL, platform string) {
 	user, err := h.repo.UpsertOAuthUser(r.Context(), strings.ToLower(email), provider, providerID, displayName, avatarURL)
 	if err != nil {
-		http.Redirect(w, r, h.frontendURL+"/login?error=oauth", http.StatusFound)
+		h.redirectWithError(w, r, platform)
 		return
 	}
 
 	jwtTok, err := h.svc.IssueTokenForOAuthUser(user)
 	if err != nil {
-		http.Redirect(w, r, h.frontendURL+"/login?error=oauth", http.StatusFound)
+		h.redirectWithError(w, r, platform)
+		return
+	}
+
+	isDesktop := platform == "desktop"
+
+	if isDesktop {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authenticating with Fayde</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0a0a0a;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            max-width: 400px;
+            padding: 40px;
+            background-color: #121212;
+            border: 1px solid #1f1f1f;
+            border-radius: 16px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.7);
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 12px;
+            color: #ffffff;
+        }
+        p {
+            font-size: 14px;
+            color: #a0a0a0;
+            margin-bottom: 28px;
+            line-height: 1.5;
+        }
+        .btn {
+            display: inline-block;
+            background-color: #ffffff;
+            color: #000000;
+            font-weight: 600;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Successfully Authenticated!</h1>
+        <p>Your browser should have opened the Fayde desktop app. You can safely close this browser tab now.</p>
+        <a href="fayde://auth/oauth-callback?token=%s" class="btn">Open Fayde</a>
+    </div>
+    <script>
+        // Trigger the deep link callback for the desktop app via an iframe
+        // to prevent the browser window from getting stuck in an infinite loading/pending state.
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = "fayde://auth/oauth-callback?token=%s";
+        document.body.appendChild(iframe);
+
+        setTimeout(function() {
+            window.close();
+        }, 5000);
+    </script>
+</body>
+</html>
+		`, jwtTok, jwtTok)
 		return
 	}
 
@@ -159,35 +242,120 @@ func (h *OAuthHandler) finishOAuth(w http.ResponseWriter, r *http.Request, email
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
+func (h *OAuthHandler) redirectWithError(w http.ResponseWriter, r *http.Request, platform string) {
+	isDesktop := platform == "desktop"
+
+	if isDesktop {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		fmt.Fprintf(w, `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Authentication Failed</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #0a0a0a;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+        .container {
+            max-width: 400px;
+            padding: 40px;
+            background-color: #121212;
+            border: 1px solid #1f1f1f;
+            border-radius: 16px;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.7);
+        }
+        h1 {
+            font-size: 24px;
+            margin-bottom: 12px;
+            color: #ef4444;
+        }
+        p {
+            font-size: 14px;
+            color: #a0a0a0;
+            margin-bottom: 28px;
+            line-height: 1.5;
+        }
+        .btn {
+            display: inline-block;
+            background-color: #ef4444;
+            color: #ffffff;
+            font-weight: 600;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Authentication Failed</h1>
+        <p>Something went wrong during login. Please return to the app and try again.</p>
+        <a href="fayde://auth/oauth-callback?error=oauth" class="btn">Return to Fayde</a>
+    </div>
+    <script>
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.src = "fayde://auth/oauth-callback?error=oauth";
+        document.body.appendChild(iframe);
+    </script>
+</body>
+</html>
+		`)
+		return
+	}
+
+	target := h.frontendURL + "/login?error=oauth"
+	http.Redirect(w, r, target, http.StatusFound)
+}
+
 // newState returns an HMAC-signed state token valid for 10 minutes.
-func (h *OAuthHandler) newState() string {
+func (h *OAuthHandler) newState(platform string) string {
 	nonce := make([]byte, 8)
 	_, _ = rand.Read(nonce)
 	exp := strconv.FormatInt(time.Now().Add(10*time.Minute).Unix(), 10)
-	payload := hex.EncodeToString(nonce) + ":" + exp
+	payload := hex.EncodeToString(nonce) + ":" + exp + ":" + platform
 	sig := h.sign(payload)
 	return payload + "." + sig
 }
 
 // verifyState checks the HMAC signature and expiry.
-func (h *OAuthHandler) verifyState(state string) bool {
+func (h *OAuthHandler) verifyState(state string) (string, bool) {
 	parts := strings.SplitN(state, ".", 2)
 	if len(parts) != 2 {
-		return false
+		return "", false
 	}
 	payload, sig := parts[0], parts[1]
 	if h.sign(payload) != sig {
-		return false
+		return "", false
 	}
-	subParts := strings.SplitN(payload, ":", 2)
-	if len(subParts) != 2 {
-		return false
+	subParts := strings.Split(payload, ":")
+	if len(subParts) < 2 {
+		return "", false
 	}
 	exp, err := strconv.ParseInt(subParts[1], 10, 64)
 	if err != nil {
-		return false
+		return "", false
 	}
-	return time.Now().Unix() <= exp
+	if time.Now().Unix() > exp {
+		return "", false
+	}
+	platform := ""
+	if len(subParts) >= 3 {
+		platform = subParts[2]
+	}
+	return platform, true
 }
 
 func (h *OAuthHandler) sign(msg string) string {

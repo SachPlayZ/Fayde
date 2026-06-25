@@ -92,7 +92,7 @@ func New(
 	r.Use(middleware.Recoverer)
 
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{cfg.CORSOrigin},
+		AllowedOrigins:   []string{cfg.CORSOrigin, "tauri://localhost", "http://tauri.localhost"},
 		AllowedMethods:   []string{"GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Cache-Control"},
 		ExposedHeaders:   []string{"Link", "Content-Type"},
