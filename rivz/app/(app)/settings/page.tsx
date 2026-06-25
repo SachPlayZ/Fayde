@@ -996,7 +996,8 @@ function TelegramTab() {
         </div>
 
         <p className="text-sm text-muted-foreground leading-relaxed">
-          Link your Telegram account to create tasks by sending messages to the Fayde bot.
+          Link your Telegram account to create tasks by sending messages to the Fayde bot (
+          <a href="https://t.me/fayde_bot" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">@fayde_bot</a>).
         </p>
 
         {linkStatus?.linked ? (
