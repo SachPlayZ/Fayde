@@ -31,6 +31,15 @@ type taskItem struct {
 }
 
 func Start(ctx context.Context, pool *pgxpool.Pool, notifSvc *notifications.Service, cfg *config.Config, calSyncSvc *calendarsync.Service, tasksSvc *tasks.Service) {
+	// Startup sweep: catch up on missed recurrences immediately.
+	if tasksSvc != nil {
+		go func() {
+			time.Sleep(5 * time.Second)
+			log.Println("scheduler: running startup recurrence sweep")
+			genereateMissedRecurrences(ctx, tasksSvc)
+		}()
+	}
+
 	// Fast loop (every minute): fire custom reminders close to their time.
 	go func() {
 		t := time.NewTicker(1 * time.Minute)
