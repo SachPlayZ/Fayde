@@ -20,6 +20,7 @@ export default function HomePage() {
     const checkTauri =
       typeof window !== "undefined" &&
       (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsTauri(checkTauri);
   }, []);
 
