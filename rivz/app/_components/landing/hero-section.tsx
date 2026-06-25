@@ -170,12 +170,6 @@ export function HeroSection() {
                 >
                   Use web version
                 </Link>
-                <Link
-                  href="/login"
-                  className="text-zinc-500 hover:text-white text-sm transition-colors duration-200 whitespace-nowrap"
-                >
-                  Sign in
-                </Link>
               </div>
               <div className="pl-1">
                 {downloadLink.os === "mac" ? (

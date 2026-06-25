@@ -2,10 +2,37 @@
 import Link from "next/link";
 import Image from "next/image";
 import { motion, useScroll, useTransform } from "motion/react";
+import { useEffect, useState } from "react";
 
 export function LandingNav() {
   const { scrollY } = useScroll();
   const bgOpacity = useTransform(scrollY, [0, 60], [0, 1]);
+
+  const [downloadLink, setDownloadLink] = useState<{ url: string; label: string }>({
+    url: "https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_universal.dmg",
+    label: "Download",
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const ua = window.navigator.userAgent.toLowerCase();
+
+    const macUrl = "https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_universal.dmg";
+    const winUrl = "https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_x64-setup.exe";
+
+    let linkConfig: { url: string; label: string };
+
+    if (ua.includes("mac")) {
+      linkConfig = { url: macUrl, label: "Download for macOS" };
+    } else if (ua.includes("win")) {
+      linkConfig = { url: winUrl, label: "Download for Windows" };
+    } else {
+      linkConfig = { url: macUrl, label: "Download for macOS" };
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDownloadLink(linkConfig);
+  }, []);
 
   return (
     <header className="fixed top-0 left-0 right-0 z-40">
@@ -34,12 +61,12 @@ export function LandingNav() {
           >
             Sign in
           </Link>
-          <Link
-            href="/signup"
-            className="bg-white text-black text-sm font-semibold px-5 py-2 rounded-full hover:bg-zinc-100 transition-colors duration-200 active:scale-[0.97]"
+          <a
+            href={downloadLink.url}
+            className="bg-white text-black text-sm font-semibold px-5 py-2 rounded-full hover:bg-zinc-100 transition-colors duration-200 active:scale-[0.97] whitespace-nowrap"
           >
-            Get started
-          </Link>
+            {downloadLink.label}
+          </a>
         </div>
       </nav>
     </header>
