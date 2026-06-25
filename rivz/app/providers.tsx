@@ -23,7 +23,7 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const isTauri =
       typeof window !== "undefined" &&
-      (window as any).__TAURI_INTERNALS__ !== undefined;
+      (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
     if (!isTauri) return;
 
     let unsubscribe: (() => void) | undefined;
@@ -84,7 +84,7 @@ function InnerProviders({ children }: { children: React.ReactNode }) {
         unsubscribe();
       }
     };
-  }, [login]);
+  }, [login, router]);
 
   return (
     <>

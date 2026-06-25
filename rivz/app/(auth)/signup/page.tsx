@@ -47,7 +47,7 @@ export default function SignupPage() {
   const handleOAuth = async (provider: "google" | "github") => {
     const isTauri =
       typeof window !== "undefined" &&
-      (window as any).__TAURI_INTERNALS__ !== undefined;
+      (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
     const url = isTauri
       ? `${BASE_URL}/auth/${provider}?platform=desktop`
       : `${BASE_URL}/auth/${provider}`;
