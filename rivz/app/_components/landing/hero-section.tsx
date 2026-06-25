@@ -144,7 +144,7 @@ export function HeroSection() {
               initial={reduce ? false : { opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.7, delay: 0.85, ease: [0.16, 1, 0.3, 1] }}
-              className="flex flex-col gap-4 flex-shrink-0"
+              className="flex flex-col gap-4 flex-shrink-0 md:ml-auto md:items-end"
             >
               <div className="flex items-center">
                 <a
@@ -164,7 +164,7 @@ export function HeroSection() {
                   {downloadLink.label}
                 </a>
               </div>
-              <div className="pl-1">
+              <div className="md:pr-1 text-left md:text-right">
                 {downloadLink.os === "mac" ? (
                   <a
                     href="https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_x64-setup.exe"
