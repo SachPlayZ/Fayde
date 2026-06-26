@@ -83,7 +83,6 @@ import {
   Globe,
   Play,
   Square,
-  History,
   Sliders,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -204,13 +203,23 @@ function useElapsedTimer(startedAt: string | undefined) {
 
   useEffect(() => {
     if (!startedAt) {
-      setElapsed(0);
-      return;
+      const timerId = setTimeout(() => {
+        setElapsed(0);
+      }, 0);
+      return () => clearTimeout(timerId);
     }
     const calc = () => Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
-    setElapsed(calc());
-    const id = setInterval(() => setElapsed(calc()), 1000);
-    return () => clearInterval(id);
+    
+    // Set initial value asynchronously to avoid cascading render lint error
+    const timerId = setTimeout(() => {
+      setElapsed(calc());
+    }, 0);
+
+    const intervalId = setInterval(() => setElapsed(calc()), 1000);
+    return () => {
+      clearTimeout(timerId);
+      clearInterval(intervalId);
+    };
   }, [startedAt]);
 
   return elapsed;

@@ -93,7 +93,7 @@ import {
   useCreateReminder,
   useDeleteReminder,
 } from "@/lib/reminders-hooks";
-import { useTemplates, useCreateTemplate, useDeleteTemplate } from "@/lib/templates-hooks";
+import { useTemplates, useCreateTemplate } from "@/lib/templates-hooks";
 import { useCustomFieldDefs, useTaskFieldValues, useSetFieldValue } from "@/lib/customfields-hooks";
 import { toast } from "sonner";
 
@@ -235,18 +235,20 @@ export function TaskForm({ open, onOpenChange, task, defaultDate }: TaskFormProp
   // Local state for custom fields in creation/edit mode
   const [localFieldValues, setLocalFieldValues] = useState<Record<string, string>>({});
 
-  // Sync edit values
-  useEffect(() => {
+  // Sync edit values during render
+  const [prevSyncKey, setPrevSyncKey] = useState<string>("");
+  const currentSyncKey = `${task?.id ?? ""}-${fieldValues.map(v => `${v.field_id}:${v.value}`).join(",")}-${open}`;
+
+  if (currentSyncKey !== prevSyncKey) {
+    setPrevSyncKey(currentSyncKey);
+    const vals: Record<string, string> = {};
     if (task && fieldValues.length > 0) {
-      const vals: Record<string, string> = {};
       for (const val of fieldValues) {
         vals[val.field_id] = val.value;
       }
-      setLocalFieldValues(vals);
-    } else {
-      setLocalFieldValues({});
     }
-  }, [task, fieldValues, open]);
+    setLocalFieldValues(vals);
+  }
 
   const {
     register,
