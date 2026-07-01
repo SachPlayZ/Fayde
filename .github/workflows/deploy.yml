@@ -41,8 +41,32 @@ jobs:
           # 2. Upload compiled binary to VM as a temp file
           scp backend/server ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/ubuntu/server.tmp
 
-          # 3. SSH into VM, replace the running binary atomically, and restart systemd service
+          # 3. SSH into VM, setup systemd if missing, replace the binary, and restart service
           ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+            # Create systemd service file if it doesn't exist
+            if [ ! -f /etc/systemd/system/fayde-backend.service ]; then
+              echo "Creating systemd service file..."
+              sudo tee /etc/systemd/system/fayde-backend.service > /dev/null << 'SERVICE'
+[Unit]
+Description=Fayde Go Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu
+EnvironmentFile=/home/ubuntu/fayde-backend.env
+ExecStart=/home/ubuntu/server
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+              sudo systemctl daemon-reload
+              sudo systemctl enable fayde-backend
+            fi
+
             echo "Stopping fayde-backend..."
             sudo systemctl stop fayde-backend || true
 
@@ -59,3 +83,4 @@ jobs:
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+
