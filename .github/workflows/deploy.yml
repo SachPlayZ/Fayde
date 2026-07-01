@@ -1,0 +1,64 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
+
+jobs:
+  deploy:
+    name: Build & Deploy to Oracle VM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+          cache-dependency-path: backend/go.sum
+
+      - name: Build Go Backend
+        working-directory: backend
+        # Compiles Go binary for Linux/ARM64 (OCI Ampere A1 Flex Shape)
+        # Note: Change GOARCH to amd64 if you are using a standard AMD/Intel VM
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o server ./cmd/api
+
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          # We'll dynamically scan the host key below to avoid hardcoded known_hosts
+          known_hosts: "unspecified"
+
+      - name: Upload Binary and Restart Service
+        run: |
+          # 1. Add VM IP to known hosts
+          ssh-keyscan -H ${{ secrets.DEPLOY_HOST }} >> ~/.ssh/known_hosts
+
+          # 2. Upload compiled binary to VM as a temp file
+          scp backend/server ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/ubuntu/server.tmp
+
+          # 3. SSH into VM, replace the running binary atomically, and restart systemd service
+          ssh ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }} << 'EOF'
+            echo "Stopping fayde-backend..."
+            sudo systemctl stop fayde-backend || true
+
+            echo "Swapping new binary..."
+            mv /home/ubuntu/server.tmp /home/ubuntu/server
+            chmod +x /home/ubuntu/server
+
+            echo "Restarting service..."
+            sudo systemctl start fayde-backend
+            
+            echo "Deployment finished! Service status:"
+            sudo systemctl status fayde-backend --no-pager | head -n 10
+          EOF
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
