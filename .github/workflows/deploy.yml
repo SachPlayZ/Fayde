@@ -24,8 +24,6 @@ jobs:
 
       - name: Build Go Backend
         working-directory: backend
-        # Compiles Go binary for Linux/ARM64 (OCI Ampere A1 Flex Shape)
-        # Note: Change GOARCH to amd64 if you are using a standard AMD/Intel VM
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o server ./cmd/api
 
@@ -33,7 +31,6 @@ jobs:
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          # We'll dynamically scan the host key below to avoid hardcoded known_hosts
           known_hosts: "unspecified"
 
       - name: Upload Binary and Restart Service
