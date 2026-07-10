@@ -269,8 +269,8 @@ func TestOwnerOnlyDelete(t *testing.T) {
 	ctx := context.Background()
 	svc := newService()
 
-	ownerID := createTestUser(t, "del_owner@example.com")
-	memberEmail := "del_member@example.com"
+	ownerID := createTestUser(t, "boarddel_owner@example.com")
+	memberEmail := "boarddel_member@example.com"
 	createTestUser(t, memberEmail)
 
 	b, err := svc.CreateBoard(ctx, ownerID, boards.CreateBoardInput{Name: "Delete Board"})
