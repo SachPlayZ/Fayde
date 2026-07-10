@@ -16,6 +16,7 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/attachments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/automations"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/boards"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/calendarsync"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/comments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/config"
@@ -24,7 +25,7 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/db"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/dependencies"
 	emailpkg "github.com/SachPlayZ/rivz-asn/backend/internal/email"
-	"github.com/SachPlayZ/rivz-asn/backend/internal/focusmode"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/friends"
 	githubpkg "github.com/SachPlayZ/rivz-asn/backend/internal/github"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/goals"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/groq"
@@ -243,10 +244,17 @@ func run() error {
 	inboxRepo := inbox.NewRepository(pool)
 	inboxHandler := inbox.NewHandler(inboxRepo, tasksSvc, cfg.ResendAPIKey, cfg.InboxDomain)
 
-	// Focus mode.
-	focusmodeRepo := focusmode.NewRepository(pool)
-	focusmodeSvc := focusmode.NewService(focusmodeRepo)
-	focusmodeHandler := focusmode.NewHandler(focusmodeSvc)
+	// Friends.
+	friendsRepo := friends.NewRepository(pool)
+	friendsSvc := friends.NewService(friendsRepo)
+	friendsHandler := friends.NewHandler(friendsSvc)
+
+	// Boards.
+	boardsRepo := boards.NewRepository(pool)
+	boardsSvc := boards.NewService(boardsRepo)
+	boardsSvc.SetNotificationsService(notifSvc)
+	boardsSvc.SetSSEBroker(sseBroker)
+	boardsHandler := boards.NewHandler(boardsSvc)
 
 	// Automations engine.
 	automationsRepo := automations.NewRepository(pool)
@@ -289,7 +297,15 @@ func run() error {
 		Subject:    cfg.VAPIDSubject,
 	})
 	webpushHandler := webpush.NewHandler(webpushSvc)
-	notifSvc.SetDeliverers(emailClient, webpushSvc, cfg.FrontendURL)
+	// emailClient is a *emailpkg.Client that may be nil (SMTP not configured). Passing a
+	// typed-nil pointer directly as the EmailSender interface would make s.email != nil
+	// true inside notifications.deliver, then panic on the nil receiver — so only pass a
+	// non-nil interface value when there's an actual client.
+	var emailSender notifications.EmailSender
+	if emailClient != nil {
+		emailSender = emailClient
+	}
+	notifSvc.SetDeliverers(emailSender, webpushSvc, cfg.FrontendURL)
 
 	// Groq AI.
 	var groqClient *groq.Client
@@ -325,7 +341,8 @@ func run() error {
 		webhooksHandler, githubHandler, sharingHandler, pomodoroHandler,
 		groqHandler, apiTokensSvc, webpushHandler, notesHandler, searchHandler,
 		habitsHandler, dashboardHandler, goalsHandler, remindersHandler,
-		automationsHandler, focusmodeHandler, inboxHandler, calendarSyncHandler, telegramHandler,
+		automationsHandler, inboxHandler, calendarSyncHandler, telegramHandler,
+		friendsHandler, boardsHandler,
 	)
 
 	srv := &http.Server{

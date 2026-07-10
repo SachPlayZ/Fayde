@@ -9,12 +9,13 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/attachments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/automations"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/boards"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/comments"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/calendarsync"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/customfields"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/dashboard"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/dependencies"
-	"github.com/SachPlayZ/rivz-asn/backend/internal/focusmode"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/friends"
 	githubpkg "github.com/SachPlayZ/rivz-asn/backend/internal/github"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/goals"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/groq"
@@ -83,10 +84,11 @@ func New(
 	goalsHandler *goals.Handler,
 	remindersHandler *reminders.Handler,
 	automationsHandler *automations.Handler,
-	focusmodeHandler *focusmode.Handler,
 	inboxHandler *inbox.Handler,
 	calendarSyncHandler *calendarsync.Handler,
 	telegramHandler *telegram.Handler,
+	friendsHandler *friends.Handler,
+	boardsHandler *boards.Handler,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -111,6 +113,7 @@ func New(
 	// Public routes (no auth).
 	r.Post("/track", adminHandler.TrackPageView)
 	r.Get("/share/{token}", sharingHandler.PublicView)
+	r.Get("/boards/join/{token}", boardsHandler.JoinPreview)
 	r.Post("/webhooks/github", githubHandler.Webhook)
 	r.Post("/webhooks/email", inboxHandler.Webhook)
 
@@ -320,15 +323,29 @@ func New(
 		r.Get("/pomodoro/history", pomodoroHandler.History)
 		r.Get("/pomodoro/active", pomodoroHandler.Active)
 
-		// Focus mode.
-		r.Post("/focus/start", focusmodeHandler.Start)
-		r.Post("/focus/end", focusmodeHandler.End)
-		r.Get("/focus/active", focusmodeHandler.Active)
-		r.Get("/focus/history", focusmodeHandler.History)
-		r.Get("/focus/stats", focusmodeHandler.Stats)
-		r.Get("/focus/{id}", focusmodeHandler.Get)
-		r.Patch("/focus/{id}", focusmodeHandler.Update)
-		r.Delete("/focus/{id}", focusmodeHandler.Delete)
+		// Friends.
+		r.Post("/friends/requests", friendsHandler.SendRequest)
+		r.Post("/friends/requests/{id}/accept", friendsHandler.AcceptRequest)
+		r.Post("/friends/requests/{id}/decline", friendsHandler.DeclineRequest)
+		r.Delete("/friends/{id}", friendsHandler.Remove)
+		r.Get("/friends", friendsHandler.ListFriends)
+		r.Get("/friends/requests", friendsHandler.ListRequests)
+		r.Get("/friends/search", friendsHandler.Search)
+
+		// Boards.
+		r.Post("/boards", boardsHandler.Create)
+		r.Get("/boards", boardsHandler.List)
+		r.Get("/boards/{id}", boardsHandler.Get)
+		r.Patch("/boards/{id}", boardsHandler.Update)
+		r.Delete("/boards/{id}", boardsHandler.Delete)
+		r.Post("/boards/{id}/tasks", boardsHandler.AddTask)
+		r.Delete("/boards/{id}/tasks/{taskId}", boardsHandler.DeleteTask)
+		r.Post("/boards/{id}/tasks/{taskId}/complete", boardsHandler.Complete)
+		r.Delete("/boards/{id}/tasks/{taskId}/complete", boardsHandler.Uncomplete)
+		r.Post("/boards/{id}/invite", boardsHandler.InviteFriend)
+		r.Post("/boards/{id}/share", boardsHandler.CreateShareToken)
+		r.Delete("/boards/{id}/share", boardsHandler.RevokeShareToken)
+		r.Post("/boards/join/{token}", boardsHandler.Join)
 
 		// Settings.
 		r.Get("/calendar/status", calendarSyncHandler.Status)
