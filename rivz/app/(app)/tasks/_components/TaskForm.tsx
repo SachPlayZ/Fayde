@@ -4,6 +4,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, parseISO, formatDistanceToNow, addDays, addWeeks, startOfDay } from "date-fns";
 import { parseNLDate, formatNLHint } from "@/lib/nldate";
+import { toDueInstant } from "@/lib/date-only";
 import { taskSchema, type TaskInput } from "@/lib/schemas";
 import { useCreateTask, useUpdateTask, useTasks, type Task } from "@/lib/tasks-hooks";
 import { useTaskActivity } from "@/lib/activity-hooks";
@@ -265,7 +266,7 @@ export function TaskForm({ open, onOpenChange, task, defaultDate }: TaskFormProp
       description: task?.description ?? "",
       status: task?.status ?? "todo",
       priority: task?.priority ?? "medium",
-      due_date: task?.due_date ? task.due_date.slice(0, 10) : defaultDate ?? null,
+      due_date: task?.due_date ? format(parseISO(task.due_date), "yyyy-MM-dd") : defaultDate ?? null,
       recurrence: (task?.recurrence as TaskInput["recurrence"]) ?? null,
       recurrence_end: task?.recurrence_end ? task.recurrence_end.slice(0, 10) : null,
       assignee_id: task?.assignee_id ?? null,
@@ -279,6 +280,9 @@ export function TaskForm({ open, onOpenChange, task, defaultDate }: TaskFormProp
 
   const initialDate = task?.due_date ? parseISO(task.due_date) : defaultDate ? parseISO(defaultDate) : undefined;
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(initialDate);
+  // "23:59" is the no-explicit-time sentinel (end of day default) - don't prefill it as if the user picked it.
+  const initialTime = initialDate && format(initialDate, "HH:mm") !== "23:59" ? format(initialDate, "HH:mm") : "";
+  const [dueTime, setDueTime] = useState(initialTime);
 
   useEffect(() => {
     if (open && !task && defaultDate) {
@@ -374,6 +378,7 @@ export function TaskForm({ open, onOpenChange, task, defaultDate }: TaskFormProp
   const handleDateSelect = (date: Date | undefined) => {
     setSelectedDate(date);
     setValue("due_date", date ? format(date, "yyyy-MM-dd") : null);
+    if (!date) setDueTime("");
     setNlDateInput("");
     setNlParsed(null);
     setCalendarOpen(false);
@@ -415,7 +420,7 @@ export function TaskForm({ open, onOpenChange, task, defaultDate }: TaskFormProp
     try {
       const payload = {
         ...data,
-        due_date: data.due_date ? `${data.due_date}T00:00:00Z` : null,
+        due_date: data.due_date ? toDueInstant(data.due_date, dueTime || null) : null,
         recurrence_end: data.recurrence_end ? `${data.recurrence_end}T00:00:00Z` : null,
         assignee_id: data.assignee_id || null,
       };
@@ -666,6 +671,15 @@ export function TaskForm({ open, onOpenChange, task, defaultDate }: TaskFormProp
                 <Button type="button" variant="ghost" size="icon-sm" onClick={() => handleDateSelect(undefined)}><X className="h-4 w-4" /></Button>
               )}
             </div>
+            {selectedDate && (
+              <Input
+                type="time"
+                value={dueTime}
+                onChange={(e) => setDueTime(e.target.value)}
+                placeholder="No specific time (due end of day)"
+                className="h-8 text-xs"
+              />
+            )}
             {/* NL date input */}
             <div className="relative">
               <Input

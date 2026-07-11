@@ -1,8 +1,9 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { format, addDays, addWeeks, startOfDay } from "date-fns";
+import { format, parseISO, addDays, addWeeks, startOfDay } from "date-fns";
 import { type Task, useUpdateTask, useDeleteTask } from "@/lib/tasks-hooks";
+import { isOverdue, toDueInstant } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
 import { TableRow, TableCell } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -26,7 +27,7 @@ const priorityConfig = {
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return null;
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return format(parseISO(dateStr), "MMM d, yyyy");
 }
 
 function Highlight({ text, query }: { text: string; query: string }) {
@@ -48,11 +49,6 @@ function Highlight({ text, query }: { text: string; query: string }) {
   }
   if (last < text.length) parts.push(text.slice(last));
   return <>{parts}</>;
-}
-
-function isOverdue(dateStr: string | null) {
-  if (!dateStr) return false;
-  return new Date(dateStr) < new Date();
 }
 
 type TaskRowProps = {
@@ -88,7 +84,7 @@ export function TaskRow({ task, index = 0, search = "", selected = false, onSele
     try {
       await updateTask.mutateAsync({
         id: task.id,
-        due_date: date ? `${format(date, "yyyy-MM-dd")}T00:00:00Z` : null,
+        due_date: date ? toDueInstant(format(date, "yyyy-MM-dd")) : null,
       });
       toast.success(date ? `Rescheduled to ${format(date, "MMM d")}` : "Due date cleared");
     } catch {

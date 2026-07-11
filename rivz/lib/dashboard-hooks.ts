@@ -1,5 +1,6 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
+import { startOfDay, addDays } from "date-fns";
 import { api } from "./api";
 import type { Habit } from "./habits-hooks";
 
@@ -25,6 +26,12 @@ export type DashboardSummary = {
 export function useDashboard() {
   return useQuery<DashboardSummary>({
     queryKey: ["dashboard"],
-    queryFn: () => api.get<DashboardSummary>("/dashboard"),
+    queryFn: () => {
+      const todayStart = startOfDay(new Date()).toISOString();
+      const todayEnd = startOfDay(addDays(new Date(), 1)).toISOString();
+      return api.get<DashboardSummary>(
+        `/dashboard?today_start=${encodeURIComponent(todayStart)}&today_end=${encodeURIComponent(todayEnd)}`
+      );
+    },
   });
 }

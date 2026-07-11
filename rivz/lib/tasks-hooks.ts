@@ -202,3 +202,19 @@ export function useBulkDeleteTasks() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
   });
 }
+
+export type TaskBoard = {
+  board_id: string;
+  board_name: string;
+  task_id: string;
+  shared_by: string;
+  shared_at: string;
+};
+
+export function useTaskBoards(taskId: string) {
+  return useQuery<TaskBoard[]>({
+    queryKey: ["task-boards", taskId],
+    queryFn: () => api.get<TaskBoard[]>(`/tasks/${taskId}/boards`),
+    enabled: !!taskId,
+  });
+}

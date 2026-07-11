@@ -58,10 +58,52 @@ type Completion struct {
 // BoardDetail is the rich response for GET /boards/{id}.
 type BoardDetail struct {
 	Board
-	Members     []*BoardMember `json:"members"`
-	Tasks       []*BoardTask   `json:"tasks"`
-	Completions []*Completion  `json:"completions"` // today's completions for all members
-	ShareToken  *string        `json:"share_token"`
+	Members     []*BoardMember     `json:"members"`
+	Tasks       []*BoardTask       `json:"tasks"`
+	Completions []*Completion      `json:"completions"` // today's completions for all members
+	SharedTasks []*BoardSharedTask `json:"shared_tasks"`
+	ShareToken  *string            `json:"share_token"`
+}
+
+// BoardSharedTask is a personal task a member has published to a board.
+// The task stays owned/editable only by the sharer; other members see this
+// read-only projection.
+type BoardSharedTask struct {
+	BoardID  string    `json:"board_id"`
+	TaskID   string    `json:"task_id"`
+	SharedBy string    `json:"shared_by"`
+	SharedAt time.Time `json:"shared_at"`
+
+	Title       string     `json:"title"`
+	Description string     `json:"description"`
+	Status      string     `json:"status"`
+	Priority    string     `json:"priority"`
+	DueDate     *time.Time `json:"due_date"`
+
+	OwnerEmail       string  `json:"owner_email"`
+	OwnerDisplayName *string `json:"owner_display_name"`
+	OwnerAvatarURL   *string `json:"owner_avatar_url"`
+}
+
+// TaskBoardEntry is one board a given task has been shared to, from the
+// task's point of view (used by the task-detail "Board Sharing" control).
+type TaskBoardEntry struct {
+	BoardID   string    `json:"board_id"`
+	BoardName string    `json:"board_name"`
+	TaskID    string    `json:"task_id"`
+	SharedBy  string    `json:"shared_by"`
+	SharedAt  time.Time `json:"shared_at"`
+}
+
+// ShareTaskInput holds the task to publish to a board.
+type ShareTaskInput struct {
+	TaskID string `json:"task_id" validate:"required"`
+}
+
+// SSESharedTaskUpdated is sent to board members when a shared task's fields change.
+type SSESharedTaskUpdated struct {
+	BoardID string `json:"board_id"`
+	TaskID  string `json:"task_id"`
 }
 
 // BoardInvite is the invite-link record.

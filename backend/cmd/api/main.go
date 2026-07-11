@@ -254,6 +254,7 @@ func run() error {
 	boardsSvc := boards.NewService(boardsRepo)
 	boardsSvc.SetNotificationsService(notifSvc)
 	boardsSvc.SetSSEBroker(sseBroker)
+	tasksSvc.SetBoardsNotifier(boardsSvc)
 	boardsHandler := boards.NewHandler(boardsSvc)
 
 	// Automations engine.

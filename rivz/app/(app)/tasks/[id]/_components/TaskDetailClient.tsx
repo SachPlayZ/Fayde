@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { format, parseISO, formatDistanceToNow } from "date-fns";
 import { useTask, useUpdateTask, useDeleteTask, useTasks } from "@/lib/tasks-hooks";
+import { toDueInstant } from "@/lib/date-only";
 import { useTaskActivity } from "@/lib/activity-hooks";
 import { useAttachments, useUploadAttachment, useDeleteAttachment } from "@/lib/attachments-hooks";
 import { useSubtasks, useCreateSubtask, useUpdateSubtask, useDeleteSubtask, useReorderSubtasks } from "@/lib/subtasks-hooks";
@@ -12,6 +13,8 @@ import { useTaskDependencies, useAddDependency, useRemoveDependency } from "@/li
 import { useAdminUsers } from "@/lib/admin-hooks";
 import { useAuth } from "@/lib/auth-context";
 import { useShareToken, useCreateShareToken, useDeleteShareToken } from "@/lib/sharing-hooks";
+import { useBoards, useShareTaskToBoard, useUnshareTaskFromBoard } from "@/lib/boards-hooks";
+import { useTaskBoards } from "@/lib/tasks-hooks";
 import { useWatchers, useWatchStatus, useAddWatcher, useRemoveWatcher } from "@/lib/watchers-hooks";
 import { useTimeEntries, useActiveTimeEntry, useStartTimer, useStopTimer, useDeleteTimeEntry, type TimeEntry } from "@/lib/timetracking-hooks";
 import { useCustomFieldDefs, useTaskFieldValues, useSetFieldValue } from "@/lib/customfields-hooks";
@@ -84,6 +87,7 @@ import {
   Play,
   Square,
   Sliders,
+  LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -321,6 +325,7 @@ export function TaskDetailClient({ id }: { id: string }) {
   const [priority, setPriority] = useState<Task["priority"]>("medium");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
+  const [dueTime, setDueTime] = useState("");
   const [recurrence, setRecurrence] = useState<string | null>(null);
   const [recurrenceEnd, setRecurrenceEnd] = useState<Date | undefined>(undefined);
 
@@ -395,6 +400,10 @@ export function TaskDetailClient({ id }: { id: string }) {
   const { data: shareToken } = useShareToken(id);
   const createShareToken = useCreateShareToken();
   const deleteShareToken = useDeleteShareToken();
+  const { data: myBoards } = useBoards();
+  const { data: taskBoards } = useTaskBoards(id);
+  const shareToBoard = useShareTaskToBoard();
+  const unshareFromBoard = useUnshareTaskFromBoard();
 
   // Watchers hooks
   const { data: watchers = [] } = useWatchers(id);
@@ -438,7 +447,12 @@ export function TaskDetailClient({ id }: { id: string }) {
       setStatus(task.status);
       setPriority(task.priority);
       setAssigneeId(task.assignee_id);
-      setSelectedDate(task.due_date ? parseISO(task.due_date) : undefined);
+      {
+        const due = task.due_date ? parseISO(task.due_date) : undefined;
+        setSelectedDate(due);
+        // "23:59" is the no-explicit-time sentinel (end of day default).
+        setDueTime(due && format(due, "HH:mm") !== "23:59" ? format(due, "HH:mm") : "");
+      }
       setRecurrence(task.recurrence);
       setRecurrenceEnd(task.recurrence_end ? parseISO(task.recurrence_end) : undefined);
     }
@@ -1191,7 +1205,7 @@ export function TaskDetailClient({ id }: { id: string }) {
                       setNlDateInput("");
                       setNlParsed(null);
                       setCalendarOpen(false);
-                      savePatch({ due_date: date ? `${format(date, "yyyy-MM-dd")}T00:00:00Z` : null });
+                      savePatch({ due_date: date ? toDueInstant(format(date, "yyyy-MM-dd"), dueTime || null) : null });
                     }}
                   />
                 </PopoverContent>
@@ -1204,6 +1218,7 @@ export function TaskDetailClient({ id }: { id: string }) {
                   className="h-8 w-8"
                   onClick={() => {
                     setSelectedDate(undefined);
+                    setDueTime("");
                     setNlDateInput("");
                     setNlParsed(null);
                     savePatch({ due_date: null });
@@ -1213,6 +1228,17 @@ export function TaskDetailClient({ id }: { id: string }) {
                 </Button>
               )}
             </div>
+            {selectedDate && (
+              <Input
+                type="time"
+                value={dueTime}
+                onChange={(e) => {
+                  setDueTime(e.target.value);
+                  savePatch({ due_date: toDueInstant(format(selectedDate, "yyyy-MM-dd"), e.target.value || null) });
+                }}
+                className="h-7 text-xs mt-1"
+              />
+            )}
             {/* Natural language date input */}
             <div className="relative mt-1">
               <Input
@@ -1227,7 +1253,7 @@ export function TaskDetailClient({ id }: { id: string }) {
                     setSelectedDate(nlParsed);
                     setNlDateInput("");
                     setNlParsed(null);
-                    savePatch({ due_date: `${format(nlParsed, "yyyy-MM-dd")}T00:00:00Z` });
+                    savePatch({ due_date: toDueInstant(format(nlParsed, "yyyy-MM-dd"), dueTime || null) });
                   }
                 }}
                 onBlur={() => {
@@ -1235,7 +1261,7 @@ export function TaskDetailClient({ id }: { id: string }) {
                     setSelectedDate(nlParsed);
                     setNlDateInput("");
                     setNlParsed(null);
-                    savePatch({ due_date: `${format(nlParsed, "yyyy-MM-dd")}T00:00:00Z` });
+                    savePatch({ due_date: toDueInstant(format(nlParsed, "yyyy-MM-dd"), dueTime || null) });
                   }
                 }}
                 placeholder="or: tomorrow, next friday…"
@@ -1541,6 +1567,45 @@ export function TaskDetailClient({ id }: { id: string }) {
                   <Globe className="size-3 text-primary" />
                   Make public (share)
                 </Button>
+              )}
+            </div>
+          </SidebarRow>
+
+          {/* Board Sharing */}
+          <SidebarRow label="Board Sharing" icon={<LayoutGrid className="size-3" />}>
+            <div className="flex flex-col gap-1 w-full">
+              {(myBoards ?? []).length === 0 ? (
+                <p className="text-xs text-muted-foreground">You are not on any boards.</p>
+              ) : (
+                (myBoards ?? []).map((board) => {
+                  const isShared = (taskBoards ?? []).some((tb) => tb.board_id === board.id);
+                  return (
+                    <label key={board.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isShared}
+                        onChange={() => {
+                          if (isShared) {
+                            unshareFromBoard.mutate(
+                              { boardId: board.id, taskId: id },
+                              { onError: (e) => toast.error(e.message || "Failed to unshare") }
+                            );
+                          } else {
+                            shareToBoard.mutate(
+                              { boardId: board.id, taskId: id },
+                              {
+                                onSuccess: () => toast.success(`Shared to ${board.name}`),
+                                onError: (e) => toast.error(e.message || "Failed to share"),
+                              }
+                            );
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span className="text-xs truncate">{board.name}</span>
+                    </label>
+                  );
+                })
               )}
             </div>
           </SidebarRow>

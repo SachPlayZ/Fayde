@@ -1,5 +1,5 @@
 "use client";
-import { differenceInDays, parseISO, startOfDay, addDays, isAfter, isBefore, format } from "date-fns";
+import { differenceInDays, startOfDay, addDays, isAfter, isBefore, parseISO, format } from "date-fns";
 import type { Task } from "@/lib/tasks-hooks";
 import { cn } from "@/lib/utils";
 
@@ -69,11 +69,11 @@ export function GanttView({ tasks, onTaskClick }: Props) {
       <div className="flex flex-col gap-1.5">
         {visibleTasks.map((task) => {
           const due = parseISO(task.due_date!);
-          const isOverdue = isBefore(due, today);
+          const isOverdue = isBefore(due, new Date());
 
           // Bar starts at today (leftmost) and ends at due_date
           // For overdue tasks, bar goes from 0% to some small negative (cap at 0), show as past-due
-          const daysUntilDue = differenceInDays(due, today);
+          const daysUntilDue = differenceInDays(startOfDay(due), today);
           const barWidthPct = Math.max(2, Math.min(100, ((daysUntilDue + 1) / WINDOW_DAYS) * 100));
           const barLeftPct = 0;
 

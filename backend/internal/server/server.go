@@ -346,6 +346,9 @@ func New(
 		r.Post("/boards/{id}/share", boardsHandler.CreateShareToken)
 		r.Delete("/boards/{id}/share", boardsHandler.RevokeShareToken)
 		r.Post("/boards/join/{token}", boardsHandler.Join)
+		r.Post("/boards/{id}/shared-tasks", boardsHandler.ShareTask)
+		r.Delete("/boards/{id}/shared-tasks/{taskId}", boardsHandler.UnshareTask)
+		r.Get("/tasks/{id}/boards", boardsHandler.ListBoardsForTask)
 
 		// Settings.
 		r.Get("/calendar/status", calendarSyncHandler.Status)

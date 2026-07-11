@@ -258,7 +258,7 @@ export function TasksPageClient() {
           filtered = all.filter(
             (t) =>
               t.due_date &&
-              isBefore(parseISO(t.due_date), today) &&
+              isBefore(parseISO(t.due_date), new Date()) &&
               t.status !== "done"
           );
           break;

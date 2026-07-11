@@ -11,6 +11,8 @@ import {
   useInviteFriendToBoard,
   useCreateBoardShareToken,
   useRevokeBoardShareToken,
+  useShareTaskToBoard,
+  useUnshareTaskFromBoard,
   type BoardMember,
   type BoardTask,
 } from "@/lib/boards-hooks";
@@ -41,6 +43,7 @@ import {
   X,
   LayoutGrid,
   ListTodo,
+  Share2,
 } from "lucide-react";
 import { format as fmtDate } from "date-fns";
 
@@ -113,6 +116,8 @@ export default function BoardDetailPage({
   const inviteFriend = useInviteFriendToBoard();
   const createShareToken = useCreateBoardShareToken();
   const revokeShareToken = useRevokeBoardShareToken();
+  const shareTask = useShareTaskToBoard();
+  const unshareTask = useUnshareTaskFromBoard();
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
 
@@ -125,9 +130,15 @@ export default function BoardDetailPage({
     limit: 50,
   });
 
-  // SSE: refresh board when a board_task_completed event arrives
+  // Personal tasks (any status) for the "Share a Task" picker
+  const { data: myAllTasksData } = useTasks({ limit: 50 });
+
+  // SSE: refresh board when a board_task_completed or shared_task_updated event arrives
   useEffect(() => {
-    if (lastEvent?.type === "board_task_completed") {
+    if (
+      lastEvent?.type === "board_task_completed" ||
+      lastEvent?.type === "shared_task_updated"
+    ) {
       qc.invalidateQueries({ queryKey: ["board", id] });
     }
   }, [lastEvent, id, qc]);
@@ -156,6 +167,8 @@ export default function BoardDetailPage({
   const members = board.members ?? [];
   const tasks = board.tasks ?? [];
   const completions = board.completions ?? [];
+  const sharedTasks = board.shared_tasks ?? [];
+  const sharedTaskIds = new Set(sharedTasks.map((t) => t.task_id));
 
   // Build a set for quick lookup: "taskId:userId" -> true if completed today
   const completedSet = new Set(
@@ -198,6 +211,23 @@ export default function BoardDetailPage({
       completeTask.mutate(
         { boardId: id, taskId: task.id },
         { onError: (err) => toast.error(err.message || "Failed") }
+      );
+    }
+  };
+
+  const handleToggleShare = (taskId: string, isShared: boolean) => {
+    if (isShared) {
+      unshareTask.mutate(
+        { boardId: id, taskId },
+        { onError: (err) => toast.error(err.message || "Failed to unshare task") }
+      );
+    } else {
+      shareTask.mutate(
+        { boardId: id, taskId },
+        {
+          onSuccess: () => toast.success("Task shared to board"),
+          onError: (err) => toast.error(err.message || "Failed to share task"),
+        }
       );
     }
   };
@@ -345,6 +375,114 @@ export default function BoardDetailPage({
             <Plus className="size-3.5" /> Add
           </Button>
         </div>
+      </div>
+
+      {/* Shared Tasks (read-only for other members) */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border bg-muted/30">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Shared Tasks
+          </p>
+        </div>
+        {sharedTasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-muted-foreground text-center px-4">
+            <Share2 className="size-5" />
+            <p className="text-xs">No one has shared a personal task to this board yet.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {sharedTasks.map((st) => {
+              const cfg = statusConfig[st.status];
+              const isOwner = st.shared_by === myUserId;
+              return (
+                <div key={`${st.board_id}:${st.task_id}`} className="flex items-start gap-3 px-4 py-2.5">
+                  <div className="size-6 rounded-full bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center overflow-hidden shrink-0 mt-0.5">
+                    {st.owner_avatar_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={st.owner_avatar_url}
+                        alt={st.owner_display_name || st.owner_email}
+                        className="size-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <span className="text-primary text-[9px] font-bold">
+                        {(st.owner_display_name || st.owner_email).slice(0, 2).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{st.title}</span>
+                      {cfg && (
+                        <Badge className={cn("text-[10px] px-1.5 py-0 shrink-0", cfg.className)}>
+                          {cfg.label}
+                        </Badge>
+                      )}
+                    </div>
+                    {st.description && (
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">{st.description}</p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Shared by {st.owner_display_name || st.owner_email}
+                      {st.due_date && ` · Due ${fmtDate(new Date(st.due_date), "MMM d, yyyy")}`}
+                    </p>
+                  </div>
+                  {isOwner && (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="size-6 text-muted-foreground/50 hover:text-destructive shrink-0"
+                      onClick={() => handleToggleShare(st.task_id, true)}
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Share a Task */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-border bg-muted/30">
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+            Share a Task
+          </p>
+        </div>
+        {(myAllTasksData?.data?.length ?? 0) === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-1.5 py-6 text-muted-foreground text-center px-4">
+            <p className="text-xs">You have no tasks to share yet.</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-border">
+            {myAllTasksData!.data.map((task) => {
+              const isShared = sharedTaskIds.has(task.id);
+              const cfg = statusConfig[task.status];
+              return (
+                <label
+                  key={task.id}
+                  className="flex items-center gap-3 px-4 py-2.5 cursor-pointer hover:bg-muted/20 transition-colors"
+                >
+                  <input
+                    type="checkbox"
+                    checked={isShared}
+                    onChange={() => handleToggleShare(task.id, isShared)}
+                    className="rounded"
+                  />
+                  <span className="flex-1 text-sm truncate">{task.title}</span>
+                  {cfg && (
+                    <Badge className={cn("text-[10px] px-1.5 py-0 shrink-0", cfg.className)}>
+                      {cfg.label}
+                    </Badge>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Invite & Share */}

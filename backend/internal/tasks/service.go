@@ -41,6 +41,13 @@ type WatchersService interface {
 	NotifyWatchers(ctx context.Context, taskID, updaterUserID, taskTitle string)
 }
 
+// BoardsNotifier is satisfied by boards.Service to fan out SSE events to board
+// members when a shared task is updated. Defined here as an interface to avoid
+// a circular import between the tasks and boards packages.
+type BoardsNotifier interface {
+	NotifyBoardMembersTaskUpdated(ctx context.Context, taskID string)
+}
+
 // Service handles business logic for task operations.
 type Service struct {
 	repo          Repository
@@ -52,6 +59,7 @@ type Service struct {
 	watchersSvc   WatchersService
 	automationEng AutomationEngine
 	calendarSyncSvc CalendarSyncService
+	boardsNotifier  BoardsNotifier
 }
 
 // AutomationEngine reacts to task lifecycle events (implemented by automations.Service).
@@ -88,6 +96,11 @@ func (s *Service) SetWebhooksService(webhooksSvc WebhooksService) {
 // SetWatchersService wires in the watchers dependency.
 func (s *Service) SetWatchersService(watchersSvc WatchersService) {
 	s.watchersSvc = watchersSvc
+}
+
+// SetBoardsNotifier wires in the boards SSE fan-out dependency post-construction.
+func (s *Service) SetBoardsNotifier(n BoardsNotifier) {
+	s.boardsNotifier = n
 }
 
 // SetCalendarSyncService wires in the calendar sync dependency post-construction.
@@ -211,6 +224,10 @@ func (s *Service) UpdateTask(ctx context.Context, id, userID string, req UpdateR
 	}
 
 	s.sseBroker.Publish(userID, sse.Event{Type: "task.updated", Payload: task})
+
+	if s.boardsNotifier != nil {
+		go s.boardsNotifier.NotifyBoardMembersTaskUpdated(context.Background(), task.ID)
+	}
 
 	if s.webhooksSvc != nil {
 		event := "task.updated"

@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { format, parseISO } from "date-fns";
 import { useDashboard, type TaskBrief } from "@/lib/dashboard-hooks";
+import { formatDueRelative } from "@/lib/date-only";
 import { usePlanDay } from "@/lib/ai-hooks";
 import { Button } from "@/components/ui/button";
 import {
@@ -74,7 +74,7 @@ function TaskList({ tasks, empty }: { tasks: TaskBrief[]; empty: string }) {
           <span className="truncate flex-1">{t.title}</span>
           {t.due_date && (
             <span className="text-xs text-muted-foreground shrink-0">
-              {format(parseISO(t.due_date), "MMM d")}
+              {formatDueRelative(t.due_date)}
             </span>
           )}
         </Link>

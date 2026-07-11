@@ -79,6 +79,10 @@ func (s *Service) GetBoard(ctx context.Context, callerID, boardID string) (*Boar
 	if err != nil {
 		return nil, err
 	}
+	sharedTasks, err := s.repo.ListSharedTasks(ctx, boardID)
+	if err != nil {
+		return nil, err
+	}
 
 	if members == nil {
 		members = []*BoardMember{}
@@ -88,6 +92,9 @@ func (s *Service) GetBoard(ctx context.Context, callerID, boardID string) (*Boar
 	}
 	if completions == nil {
 		completions = []*Completion{}
+	}
+	if sharedTasks == nil {
+		sharedTasks = []*BoardSharedTask{}
 	}
 
 	inv, err := s.repo.GetInviteByBoard(ctx, boardID)
@@ -106,6 +113,7 @@ func (s *Service) GetBoard(ctx context.Context, callerID, boardID string) (*Boar
 		Members:     members,
 		Tasks:       tasks,
 		Completions: completions,
+		SharedTasks: sharedTasks,
 		ShareToken:  shareToken,
 	}, nil
 }
@@ -377,4 +385,81 @@ func (s *Service) JoinViaToken(ctx context.Context, callerID, token string) (*Bo
 	}
 
 	return s.repo.GetBoard(ctx, inv.BoardID)
+}
+
+// ── Shared tasks ──────────────────────────────────────────────────────────────
+
+// ShareTask publishes one of the caller's own tasks to a board they're a member of.
+func (s *Service) ShareTask(ctx context.Context, callerID, boardID, taskID string) error {
+	ok, err := s.repo.IsMember(ctx, boardID, callerID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotMember
+	}
+	ownerID, err := s.repo.GetTaskOwner(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if ownerID != callerID {
+		return ErrForbidden
+	}
+	return s.repo.ShareTask(ctx, boardID, taskID, callerID)
+}
+
+// UnshareTask removes a previously published task from a board (owner only).
+func (s *Service) UnshareTask(ctx context.Context, callerID, boardID, taskID string) error {
+	ok, err := s.repo.IsMember(ctx, boardID, callerID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotMember
+	}
+	ownerID, err := s.repo.GetTaskOwner(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if ownerID != callerID {
+		return ErrForbidden
+	}
+	return s.repo.UnshareTask(ctx, boardID, taskID)
+}
+
+// ListBoardsForTask returns the boards a task has been shared to (owner only).
+func (s *Service) ListBoardsForTask(ctx context.Context, callerID, taskID string) ([]*TaskBoardEntry, error) {
+	ownerID, err := s.repo.GetTaskOwner(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if ownerID != callerID {
+		return nil, ErrForbidden
+	}
+	entries, err := s.repo.ListBoardsForTask(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	if entries == nil {
+		entries = []*TaskBoardEntry{}
+	}
+	return entries, nil
+}
+
+// NotifyBoardMembersTaskUpdated fans out an SSE event to every board a task is
+// shared to, so other members' views refresh live. Satisfies tasks.BoardsNotifier.
+func (s *Service) NotifyBoardMembersTaskUpdated(ctx context.Context, taskID string) {
+	if s.sseBroker == nil {
+		return
+	}
+	boardMembers, err := s.repo.GetBoardMembersForTask(ctx, taskID)
+	if err != nil {
+		return
+	}
+	for boardID, memberIDs := range boardMembers {
+		payload := SSESharedTaskUpdated{BoardID: boardID, TaskID: taskID}
+		for _, memberID := range memberIDs {
+			s.sseBroker.Publish(memberID, sse.Event{Type: "shared_task_updated", Payload: payload})
+		}
+	}
 }

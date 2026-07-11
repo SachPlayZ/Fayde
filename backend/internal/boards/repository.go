@@ -49,6 +49,16 @@ type Repository interface {
 	AreFriends(ctx context.Context, userA, userB string) (bool, error)
 	// GetUserDisplay returns display name for a user.
 	GetUserDisplay(ctx context.Context, userID string) (displayName string, err error)
+
+	// Shared tasks (personal tasks published to a board).
+	ShareTask(ctx context.Context, boardID, taskID, sharedBy string) error
+	UnshareTask(ctx context.Context, boardID, taskID string) error
+	ListSharedTasks(ctx context.Context, boardID string) ([]*BoardSharedTask, error)
+	ListBoardsForTask(ctx context.Context, taskID string) ([]*TaskBoardEntry, error)
+	// GetTaskOwner looks up a personal task's owner (direct SQL, avoids importing tasks package).
+	GetTaskOwner(ctx context.Context, taskID string) (string, error)
+	// GetBoardMembersForTask returns boardID -> member user IDs, for SSE fan-out.
+	GetBoardMembersForTask(ctx context.Context, taskID string) (map[string][]string, error)
 }
 
 type pgRepository struct {
@@ -390,4 +400,107 @@ func (r *pgRepository) GetUserDisplay(ctx context.Context, userID string) (strin
 		return *name, nil
 	}
 	return email, nil
+}
+
+// ── Shared tasks ──────────────────────────────────────────────────────────────
+
+func (r *pgRepository) ShareTask(ctx context.Context, boardID, taskID, sharedBy string) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO board_shared_tasks (board_id, task_id, shared_by)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (board_id, task_id) DO NOTHING
+	`, boardID, taskID, sharedBy)
+	return err
+}
+
+func (r *pgRepository) UnshareTask(ctx context.Context, boardID, taskID string) error {
+	_, err := r.pool.Exec(ctx, `
+		DELETE FROM board_shared_tasks WHERE board_id = $1 AND task_id = $2
+	`, boardID, taskID)
+	return err
+}
+
+func (r *pgRepository) ListSharedTasks(ctx context.Context, boardID string) ([]*BoardSharedTask, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT bst.board_id, bst.task_id, bst.shared_by, bst.shared_at,
+		       t.title, t.description, t.status, t.priority, t.due_date,
+		       u.email, u.display_name, u.avatar_url
+		FROM board_shared_tasks bst
+		JOIN tasks t ON t.id = bst.task_id
+		JOIN users u ON u.id = bst.shared_by
+		WHERE bst.board_id = $1
+		ORDER BY bst.shared_at
+	`, boardID)
+	if err != nil {
+		return nil, fmt.Errorf("boards.ListSharedTasks: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*BoardSharedTask
+	for rows.Next() {
+		var st BoardSharedTask
+		if err := rows.Scan(&st.BoardID, &st.TaskID, &st.SharedBy, &st.SharedAt,
+			&st.Title, &st.Description, &st.Status, &st.Priority, &st.DueDate,
+			&st.OwnerEmail, &st.OwnerDisplayName, &st.OwnerAvatarURL); err != nil {
+			return nil, fmt.Errorf("boards: scan shared task: %w", err)
+		}
+		out = append(out, &st)
+	}
+	return out, rows.Err()
+}
+
+func (r *pgRepository) ListBoardsForTask(ctx context.Context, taskID string) ([]*TaskBoardEntry, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT bst.board_id, b.name, bst.task_id, bst.shared_by, bst.shared_at
+		FROM board_shared_tasks bst
+		JOIN boards b ON b.id = bst.board_id
+		WHERE bst.task_id = $1
+		ORDER BY bst.shared_at
+	`, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("boards.ListBoardsForTask: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*TaskBoardEntry
+	for rows.Next() {
+		var e TaskBoardEntry
+		if err := rows.Scan(&e.BoardID, &e.BoardName, &e.TaskID, &e.SharedBy, &e.SharedAt); err != nil {
+			return nil, fmt.Errorf("boards: scan task board entry: %w", err)
+		}
+		out = append(out, &e)
+	}
+	return out, rows.Err()
+}
+
+func (r *pgRepository) GetTaskOwner(ctx context.Context, taskID string) (string, error) {
+	var ownerID string
+	err := r.pool.QueryRow(ctx, `SELECT user_id FROM tasks WHERE id = $1`, taskID).Scan(&ownerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return ownerID, err
+}
+
+func (r *pgRepository) GetBoardMembersForTask(ctx context.Context, taskID string) (map[string][]string, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT bst.board_id, bm.user_id
+		FROM board_shared_tasks bst
+		JOIN board_members bm ON bm.board_id = bst.board_id
+		WHERE bst.task_id = $1
+	`, taskID)
+	if err != nil {
+		return nil, fmt.Errorf("boards.GetBoardMembersForTask: %w", err)
+	}
+	defer rows.Close()
+
+	out := map[string][]string{}
+	for rows.Next() {
+		var boardID, userID string
+		if err := rows.Scan(&boardID, &userID); err != nil {
+			return nil, fmt.Errorf("boards: scan board member for task: %w", err)
+		}
+		out[boardID] = append(out[boardID], userID)
+	}
+	return out, rows.Err()
 }

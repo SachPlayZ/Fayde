@@ -1,8 +1,9 @@
 "use client";
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { format, isBefore, isSameDay, parseISO, startOfDay } from "date-fns";
+import { format, isSameDay, parseISO, startOfDay } from "date-fns";
 import { useTasks, useUpdateTask, type Task } from "@/lib/tasks-hooks";
+import { toDueInstant, isOverdue as isDueDateOverdue } from "@/lib/date-only";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, CalendarClock, SkipForward, ArrowRight } from "lucide-react";
@@ -37,7 +38,7 @@ function ReviewTaskCard({
     try {
       await updateTask.mutateAsync({
         id: task.id,
-        due_date: `${format(today, "yyyy-MM-dd")}T00:00:00Z`,
+        due_date: toDueInstant(format(today, "yyyy-MM-dd")),
       });
       toast.success("Moved to today");
     } catch {
@@ -143,10 +144,7 @@ export function DailyReviewClient() {
   const { overdue, todayTasks } = useMemo(() => {
     const list = tasks ?? [];
     const overdue = list.filter(
-      (t) =>
-        t.due_date &&
-        isBefore(parseISO(t.due_date), today) &&
-        t.status !== "done"
+      (t) => isDueDateOverdue(t.due_date) && t.status !== "done"
     );
     const todayTasks = list.filter(
       (t) => t.due_date && isSameDay(parseISO(t.due_date), today)

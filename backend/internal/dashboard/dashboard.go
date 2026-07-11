@@ -4,6 +4,7 @@ package dashboard
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/habits"
@@ -41,33 +42,46 @@ func NewService(pool *pgxpool.Pool, habitsSvc *habits.Service) *Service {
 	return &Service{pool: pool, habitsSvc: habitsSvc}
 }
 
-func (s *Service) Summary(ctx context.Context, userID string) (*Summary, error) {
+// Summary builds the dashboard aggregate. todayStart/todayEnd mark the
+// caller's local calendar day as real instants (RFC3339). Due dates now
+// carry a genuine deadline instant (exact time, or end-of-day default), so
+// Overdue/Due-Today/Upcoming bucket on real time comparisons rather than a
+// day-of-the-month cast — otherwise a 9pm deadline wouldn't flip to overdue
+// until the whole day passed.
+func (s *Service) Summary(ctx context.Context, userID, todayStart, todayEnd string) (*Summary, error) {
 	sum := &Summary{
 		DueToday: []*TaskBrief{}, Overdue: []*TaskBrief{}, Upcoming: []*TaskBrief{},
 		Habits: []*habits.Habit{},
 	}
 
+	if _, err := time.Parse(time.RFC3339, todayStart); err != nil {
+		todayStart = time.Now().UTC().Truncate(24 * time.Hour).Format(time.RFC3339)
+	}
+	if _, err := time.Parse(time.RFC3339, todayEnd); err != nil {
+		todayEnd = time.Now().UTC().Truncate(24 * time.Hour).Add(24 * time.Hour).Format(time.RFC3339)
+	}
+
 	const openFilter = `status NOT IN ('done','failed')`
 
-	dueToday, err := s.tasks(ctx,
-		`WHERE user_id=$1 AND due_date::date = (now() at time zone 'utc')::date AND `+openFilter+
-			` ORDER BY priority DESC LIMIT 50`, userID)
-	if err != nil {
-		return nil, err
-	}
-	sum.DueToday = dueToday
-
 	overdue, err := s.tasks(ctx,
-		`WHERE user_id=$1 AND due_date < now() AND due_date::date < (now() at time zone 'utc')::date AND `+openFilter+
+		`WHERE user_id=$1 AND due_date < now() AND `+openFilter+
 			` ORDER BY due_date ASC LIMIT 50`, userID)
 	if err != nil {
 		return nil, err
 	}
 	sum.Overdue = overdue
 
+	dueToday, err := s.tasks(ctx,
+		`WHERE user_id=$1 AND due_date >= now() AND due_date < $2 AND `+openFilter+
+			` ORDER BY due_date ASC LIMIT 50`, userID, todayEnd)
+	if err != nil {
+		return nil, err
+	}
+	sum.DueToday = dueToday
+
 	upcoming, err := s.tasks(ctx,
-		`WHERE user_id=$1 AND due_date::date > (now() at time zone 'utc')::date AND `+openFilter+
-			` ORDER BY due_date ASC LIMIT 10`, userID)
+		`WHERE user_id=$1 AND due_date >= $2 AND `+openFilter+
+			` ORDER BY due_date ASC LIMIT 10`, userID, todayEnd)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +102,7 @@ func (s *Service) Summary(ctx context.Context, userID string) (*Summary, error) 
 
 	_ = s.pool.QueryRow(ctx,
 		`SELECT count(*) FROM pomodoro_sessions WHERE user_id=$1 AND completed=true
-		 AND started_at::date = (now() at time zone 'utc')::date`, userID).Scan(&sum.PomodorosToday)
+		 AND started_at >= $2 AND started_at < $3`, userID, todayStart, todayEnd).Scan(&sum.PomodorosToday)
 
 	if hs, err := s.habitsSvc.List(ctx, userID); err == nil {
 		sum.Habits = hs
@@ -122,7 +136,9 @@ func NewHandler(svc *Service) *Handler { return &Handler{svc: svc} }
 
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
-	sum, err := h.svc.Summary(r.Context(), userID)
+	todayStart := r.URL.Query().Get("today_start")
+	todayEnd := r.URL.Query().Get("today_end")
+	sum, err := h.svc.Summary(r.Context(), userID, todayStart, todayEnd)
 	if err != nil {
 		httputil.Error(w, http.StatusInternalServerError, "failed to load dashboard")
 		return

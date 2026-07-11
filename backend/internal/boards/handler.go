@@ -367,3 +367,89 @@ func (h *Handler) Join(w http.ResponseWriter, r *http.Request) {
 	}
 	httputil.JSON(w, 200, map[string]string{"board_id": board.ID})
 }
+
+// ShareTask handles POST /boards/{id}/shared-tasks.
+func (h *Handler) ShareTask(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, 401, "unauthorized")
+		return
+	}
+
+	boardID := chi.URLParam(r, "id")
+	var input ShareTaskInput
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		httputil.Error(w, 400, "invalid request body")
+		return
+	}
+	if input.TaskID == "" {
+		httputil.Error(w, 400, "task_id is required")
+		return
+	}
+
+	if err := h.svc.ShareTask(r.Context(), userID, boardID, input.TaskID); err != nil {
+		switch {
+		case errors.Is(err, ErrNotMember):
+			httputil.Error(w, 403, "not a member of this board")
+		case errors.Is(err, ErrForbidden):
+			httputil.Error(w, 403, "you do not own this task")
+		case errors.Is(err, ErrNotFound):
+			httputil.Error(w, 404, "task not found")
+		default:
+			httputil.Error(w, 500, "failed to share task")
+		}
+		return
+	}
+	httputil.JSON(w, 200, map[string]string{"status": "shared"})
+}
+
+// UnshareTask handles DELETE /boards/{id}/shared-tasks/{taskId}.
+func (h *Handler) UnshareTask(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, 401, "unauthorized")
+		return
+	}
+
+	boardID := chi.URLParam(r, "id")
+	taskID := chi.URLParam(r, "taskId")
+
+	if err := h.svc.UnshareTask(r.Context(), userID, boardID, taskID); err != nil {
+		switch {
+		case errors.Is(err, ErrNotMember):
+			httputil.Error(w, 403, "not a member of this board")
+		case errors.Is(err, ErrForbidden):
+			httputil.Error(w, 403, "you do not own this task")
+		case errors.Is(err, ErrNotFound):
+			httputil.Error(w, 404, "task not found")
+		default:
+			httputil.Error(w, 500, "failed to unshare task")
+		}
+		return
+	}
+	httputil.JSON(w, 204, nil)
+}
+
+// ListBoardsForTask handles GET /tasks/{id}/boards ({id} here is the task ID).
+func (h *Handler) ListBoardsForTask(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, 401, "unauthorized")
+		return
+	}
+
+	taskID := chi.URLParam(r, "id")
+	entries, err := h.svc.ListBoardsForTask(r.Context(), userID, taskID)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrForbidden):
+			httputil.Error(w, 403, "you do not own this task")
+		case errors.Is(err, ErrNotFound):
+			httputil.Error(w, 404, "task not found")
+		default:
+			httputil.Error(w, 500, "failed to list boards for task")
+		}
+		return
+	}
+	httputil.JSON(w, 200, entries)
+}

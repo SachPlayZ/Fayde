@@ -36,6 +36,21 @@ export type BoardTaskCompletion = {
   completed_at: string;
 };
 
+export type BoardSharedTask = {
+  board_id: string;
+  task_id: string;
+  shared_by: string;
+  shared_at: string;
+  title: string;
+  description: string;
+  status: "todo" | "in_progress" | "done" | "failed";
+  priority: "low" | "medium" | "high";
+  due_date: string | null;
+  owner_email: string;
+  owner_display_name: string | null;
+  owner_avatar_url: string | null;
+};
+
 export type BoardDetail = {
   id: string;
   owner_id: string;
@@ -45,6 +60,7 @@ export type BoardDetail = {
   members: BoardMember[];
   tasks: BoardTask[];
   completions: BoardTaskCompletion[];
+  shared_tasks: BoardSharedTask[];
   share_token: string | null;
 };
 
@@ -180,5 +196,29 @@ export function useJoinBoard() {
     mutationFn: (token: string) =>
       api.post<{ board_id: string }>(`/boards/join/${token}`, {}),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["boards"] }),
+  });
+}
+
+export function useShareTaskToBoard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ boardId, taskId }: { boardId: string; taskId: string }) =>
+      api.post<{ status: string }>(`/boards/${boardId}/shared-tasks`, { task_id: taskId }),
+    onSuccess: (_data, { boardId, taskId }) => {
+      qc.invalidateQueries({ queryKey: ["board", boardId] });
+      qc.invalidateQueries({ queryKey: ["task-boards", taskId] });
+    },
+  });
+}
+
+export function useUnshareTaskFromBoard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ boardId, taskId }: { boardId: string; taskId: string }) =>
+      api.delete<void>(`/boards/${boardId}/shared-tasks/${taskId}`),
+    onSuccess: (_data, { boardId, taskId }) => {
+      qc.invalidateQueries({ queryKey: ["board", boardId] });
+      qc.invalidateQueries({ queryKey: ["task-boards", taskId] });
+    },
   });
 }

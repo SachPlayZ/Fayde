@@ -19,6 +19,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { format, parseISO } from "date-fns";
 import { CheckCircle2, Circle, Clock, XCircle, AlertCircle } from "lucide-react";
 import { useUpdateTask, type Task } from "@/lib/tasks-hooks";
+import { isOverdue as isDueDateOverdue } from "@/lib/date-only";
 import { TaskForm } from "./TaskForm";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +48,7 @@ const priorityDot: Record<string, string> = {
 function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
 
-  const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== "done";
+  const isOverdue = isDueDateOverdue(task.due_date) && task.status !== "done";
 
   return (
     <div
