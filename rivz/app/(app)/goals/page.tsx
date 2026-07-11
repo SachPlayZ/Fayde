@@ -21,8 +21,16 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { Target, Plus, Trash2, ChevronDown, ChevronRight, Calendar } from "lucide-react";
+import { Target, Plus, Trash2, ChevronDown, ChevronRight, Calendar, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 const STATUS: Record<string, { label: string; color: string }> = {
@@ -95,8 +103,72 @@ function KRRow({ goalId, kr }: { goalId: string; kr: KeyResult }) {
   );
 }
 
+function EditGoalDialog({ goal, open, onOpenChange }: { goal: Goal; open: boolean; onOpenChange: (v: boolean) => void }) {
+  const update = useUpdateGoal();
+  const [title, setTitle] = useState(goal.title);
+  const [description, setDescription] = useState(goal.description ?? "");
+  const [date, setDate] = useState(goal.target_date ?? "");
+
+  const handleSave = () => {
+    if (!title.trim()) return;
+    update.mutate(
+      { id: goal.id, patch: { title: title.trim(), description, target_date: date || null } },
+      {
+        onSuccess: () => {
+          onOpenChange(false);
+          toast.success("Goal updated");
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        if (v) {
+          setTitle(goal.title);
+          setDescription(goal.description ?? "");
+          setDate(goal.target_date ?? "");
+        }
+        onOpenChange(v);
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit goal</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Goal title"
+          />
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Description…"
+            rows={4}
+          />
+          <Input
+            type="date"
+            value={date ?? ""}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </div>
+        <DialogFooter>
+          <Button onClick={handleSave} disabled={!title.trim() || update.isPending}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function GoalCard({ goal }: { goal: Goal }) {
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const update = useUpdateGoal();
   const del = useDeleteGoal();
   const addKR = useAddKR(goal.id);
@@ -141,14 +213,23 @@ function GoalCard({ goal }: { goal: Goal }) {
             ))}
           </SelectContent>
         </Select>
+        <Pencil
+          className="size-4 text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+          onClick={() => setEditOpen(true)}
+        />
         <Trash2
           className="size-4 text-muted-foreground hover:text-destructive cursor-pointer shrink-0"
           onClick={() => del.mutate(goal.id, { onSuccess: () => toast.success("Goal deleted") })}
         />
       </div>
 
+      <EditGoalDialog goal={goal} open={editOpen} onOpenChange={setEditOpen} />
+
       {open && (
         <div className="border-t border-border px-4 py-3">
+          {goal.description && (
+            <p className="text-sm text-muted-foreground mb-3 whitespace-pre-wrap">{goal.description}</p>
+          )}
           <p className="text-xs font-medium text-muted-foreground mb-1">Key results</p>
           <div className="divide-y divide-border">
             {goal.key_results.length === 0 && (
