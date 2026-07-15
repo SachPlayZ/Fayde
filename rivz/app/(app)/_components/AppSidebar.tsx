@@ -13,6 +13,7 @@ import {
   FileText,
   Users,
   LayoutGrid,
+  Sparkles,
   Settings,
   ShieldCheck,
   Activity,
@@ -58,6 +59,7 @@ const navMain = [
   { href: "/docs", label: "Docs", icon: FileText },
   { href: "/friends", label: "Friends", icon: Users },
   { href: "/boards", label: "Boards", icon: LayoutGrid },
+  { href: "/showcase", label: "Showcase", icon: Sparkles },
 ];
 
 const navSecondary = [

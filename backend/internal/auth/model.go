@@ -24,6 +24,7 @@ type User struct {
 	CreatedAt     time.Time       `json:"created_at"`
 	DisplayName   *string         `json:"display_name"`
 	AvatarURL     *string         `json:"avatar_url"`
+	Username      *string         `json:"username"`
 }
 
 // PublicUser is the subset of User safe to include in API responses.
@@ -39,6 +40,7 @@ type PublicUser struct {
 	InboxToken    *string         `json:"inbox_token"`
 	DisplayName   *string         `json:"display_name"`
 	AvatarURL     *string         `json:"avatar_url"`
+	Username      *string         `json:"username"`
 }
 
 // authResponse is the response body for signup and login endpoints.

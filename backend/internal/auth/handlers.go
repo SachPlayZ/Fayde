@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/SachPlayZ/rivz-asn/backend/internal/httputil"
@@ -184,7 +185,41 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		Theme: user.Theme, DigestEnabled: user.DigestEnabled,
 		NotifPrefs: user.NotifPrefs, ChatURL: user.ChatURL, ChatKind: user.ChatKind,
 		InboxToken: user.InboxToken, DisplayName: user.DisplayName, AvatarURL: user.AvatarURL,
+		Username: user.Username,
 	})
+}
+
+var usernameRe = regexp.MustCompile(`^[a-z0-9_-]{3,50}$`)
+
+// UpdateUsername handles PATCH /auth/me/username.
+func (h *Handler) UpdateUsername(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var body struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+	if !usernameRe.MatchString(body.Username) {
+		httputil.ValidationError(w, map[string]string{"username": "must be 3-50 lowercase letters, numbers, - or _"})
+		return
+	}
+
+	if err := h.svc.UpdateUsername(r.Context(), userID, body.Username); err != nil {
+		if errors.Is(err, ErrDuplicateUsername) {
+			httputil.Error(w, http.StatusConflict, "username already taken")
+			return
+		}
+		httputil.Error(w, http.StatusInternalServerError, "failed to update username")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // UpdatePreferences handles PATCH /auth/me/preferences.

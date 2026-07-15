@@ -19,3 +19,6 @@ var ErrInvalidToken = errors.New("auth: invalid verification token")
 
 // ErrTokenExpired is returned when a verification token has expired.
 var ErrTokenExpired = errors.New("auth: verification token expired")
+
+// ErrDuplicateUsername is returned when a username is already taken.
+var ErrDuplicateUsername = errors.New("auth: username already taken")

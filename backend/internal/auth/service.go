@@ -177,6 +177,11 @@ func (s *Service) UpdatePreferences(ctx context.Context, id string, prefs Prefer
 	return s.repo.UpdatePreferences(ctx, id, prefs)
 }
 
+// UpdateUsername sets the caller's public username slug (used for /p/{username}).
+func (s *Service) UpdateUsername(ctx context.Context, id, username string) error {
+	return s.repo.UpdateUsername(ctx, id, username)
+}
+
 func (s *Service) UploadAvatar(ctx context.Context, id, filename, contentType string, body io.Reader, size int64) (string, error) {
 	if s.s3Client == nil {
 		return "", fmt.Errorf("S3 storage not configured")

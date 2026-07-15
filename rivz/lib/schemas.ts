@@ -22,6 +22,26 @@ export const taskSchema = z.object({
   assignee_id: z.string().optional().nullable(),
 });
 
+export const showcaseEntrySchema = z.object({
+  title: z.string().min(1, "Title required"),
+  tagline: z.string().max(200, "Keep it to one sentence"),
+  problem: z.string(),
+  solution: z.string(),
+  tech_stack: z.array(
+    z.object({ name: z.string().min(1, "Required"), is_sponsor: z.boolean() })
+  ),
+  demo_url: z.union([z.string().url("Must be a valid URL"), z.literal("")]).nullable(),
+  repo_url: z.union([z.string().url("Must be a valid URL"), z.literal("")]).nullable(),
+  live_url: z.union([z.string().url("Must be a valid URL"), z.literal("")]).nullable(),
+});
+
+export const usernameSchema = z
+  .string()
+  .min(3, "At least 3 characters")
+  .max(50, "At most 50 characters")
+  .regex(/^[a-z0-9_-]+$/, "Lowercase letters, numbers, - and _ only");
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SignupInput = z.infer<typeof signupSchema>;
 export type TaskInput = z.infer<typeof taskSchema>;
+export type ShowcaseEntryInput = z.infer<typeof showcaseEntrySchema>;

@@ -30,6 +30,7 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/savedfilters"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/search"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sharing"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/showcase"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sprints"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/subtasks"
@@ -89,6 +90,8 @@ func New(
 	telegramHandler *telegram.Handler,
 	friendsHandler *friends.Handler,
 	boardsHandler *boards.Handler,
+	showcaseHandler *showcase.Handler,
+	showcaseSvc *showcase.Service,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -117,6 +120,24 @@ func New(
 	r.Post("/webhooks/github", githubHandler.Webhook)
 	r.Post("/webhooks/email", inboxHandler.Webhook)
 
+	// Showcase public page + embed API — relaxed per-route CORS (wildcard
+	// origin) since these are meant to be fetched from third-party sites and
+	// agents. go-chi/cors sets headers via Header().Set, so registering a
+	// second cors.Handler on this group overrides the root's restrictive
+	// headers for just these routes without loosening CORS anywhere else.
+	r.Group(func(r chi.Router) {
+		r.Use(cors.Handler(cors.Options{
+			AllowedOrigins: []string{"*"},
+			AllowedMethods: []string{"GET", "OPTIONS"},
+			AllowedHeaders: []string{"Authorization", "Content-Type"},
+			MaxAge:         300,
+		}))
+		r.Get("/p/{slug}", showcaseHandler.PublicList)
+		r.Get("/showcase/{id}/logo", showcaseHandler.LogoRedirect)
+		r.Get("/showcase/{id}/banner", showcaseHandler.BannerRedirect)
+		r.With(auth.AuthenticateShowcaseToken(showcaseSvc)).Get("/api/showcase/embed", showcaseHandler.Embed)
+	})
+
 	// Auth routes.
 	r.Post("/auth/signup", authHandler.Signup)
 	r.Post("/auth/login", authHandler.Login)
@@ -129,6 +150,7 @@ func New(
 	r.Get("/auth/avatar/{filename}", authHandler.GetAvatar)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Get("/auth/me", authHandler.Me)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Patch("/auth/me/preferences", authHandler.UpdatePreferences)
+	r.With(auth.Authenticate(cfg.JWTSecret)).Patch("/auth/me/username", authHandler.UpdateUsername)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Post("/auth/me/avatar", authHandler.UploadAvatar)
 
 	// Google Calendar Sync Public/OAuth Flow Routes
@@ -140,6 +162,12 @@ func New(
 	r.With(auth.Authenticate(cfg.JWTSecret)).Post("/auth/totp/enable", totpHandler.Enable)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Post("/auth/totp/disable", totpHandler.Disable)
 	r.With(auth.Authenticate(cfg.JWTSecret)).Get("/auth/totp/status", totpHandler.Status)
+
+	// Showcase token management (JWT-only, deliberately not AuthenticateAny —
+	// an apitokens rivz_ token must not be able to mint/revoke showcase tokens).
+	r.With(auth.Authenticate(cfg.JWTSecret)).Get("/settings/showcase-tokens", showcaseHandler.ListTokens)
+	r.With(auth.Authenticate(cfg.JWTSecret)).Post("/settings/showcase-tokens", showcaseHandler.GenerateToken)
+	r.With(auth.Authenticate(cfg.JWTSecret)).Delete("/settings/showcase-tokens/{id}", showcaseHandler.DeleteToken)
 
 	// SSE.
 	r.Get("/events", sseHandler.ServeSSE)
@@ -272,6 +300,17 @@ func New(
 
 		// Dashboard.
 		r.Get("/dashboard", dashboardHandler.Get)
+
+		// Showcase entries + images.
+		r.Get("/showcase", showcaseHandler.List)
+		r.Post("/showcase", showcaseHandler.Create)
+		r.Get("/showcase/{id}", showcaseHandler.Get)
+		r.Patch("/showcase/{id}", showcaseHandler.Update)
+		r.Delete("/showcase/{id}", showcaseHandler.Delete)
+		r.Post("/showcase/{id}/logo", showcaseHandler.UploadLogo)
+		r.Delete("/showcase/{id}/logo", showcaseHandler.DeleteLogo)
+		r.Post("/showcase/{id}/banner", showcaseHandler.UploadBanner)
+		r.Delete("/showcase/{id}/banner", showcaseHandler.DeleteBanner)
 
 		// Goals / OKRs.
 		r.Get("/goals", goalsHandler.List)

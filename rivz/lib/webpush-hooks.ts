@@ -21,6 +21,7 @@ export type Me = {
   inbox_token: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  username: string | null;
 };
 
 const DEFAULT_PREFS: NotifPrefs = {
@@ -56,6 +57,15 @@ export function useUpdatePreferences() {
   return useMutation({
     mutationFn: (prefs: PreferencesPatch) =>
       api.patch<void>("/auth/me/preferences", prefs),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+  });
+}
+
+export function useUpdateUsername() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (username: string) =>
+      api.patch<void>("/auth/me/username", { username }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
   });
 }

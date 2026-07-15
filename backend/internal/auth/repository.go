@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +19,7 @@ type Repository interface {
 	GetUserByEmail(ctx context.Context, email string) (*User, error)
 	GetUserByID(ctx context.Context, id string) (*User, error)
 	UpdatePreferences(ctx context.Context, id string, prefs Preferences) error
+	UpdateUsername(ctx context.Context, id, username string) error
 
 	UpsertOAuthUser(ctx context.Context, email, provider, providerID, displayName, avatarURL string) (*User, error)
 	CreateVerificationToken(ctx context.Context, userID string) (string, error)
@@ -39,7 +41,7 @@ const userSelect = `id, email, password_hash, role,
 	COALESCE(theme,'system'), COALESCE(digest_enabled,true),
 	COALESCE(notif_prefs,'{}'), notif_chat_url, notif_chat_kind, inbox_token,
 	COALESCE(email_verified,false), COALESCE(provider,'local'), provider_id,
-	created_at, display_name, avatar_url`
+	created_at, display_name, avatar_url, username`
 
 func scanUser(row pgx.Row) (*User, error) {
 	u := &User{}
@@ -48,7 +50,7 @@ func scanUser(row pgx.Row) (*User, error) {
 		&u.Theme, &u.DigestEnabled,
 		&u.NotifPrefs, &u.ChatURL, &u.ChatKind, &u.InboxToken,
 		&u.EmailVerified, &u.Provider, &u.ProviderID,
-		&u.CreatedAt, &u.DisplayName, &u.AvatarURL,
+		&u.CreatedAt, &u.DisplayName, &u.AvatarURL, &u.Username,
 	)
 	if err != nil {
 		return nil, err
@@ -139,6 +141,19 @@ func (r *pgRepository) UpdatePreferences(ctx context.Context, id string, prefs P
 	q := fmt.Sprintf(`UPDATE users SET %s WHERE id=$%d`, joinSets(sets), idx)
 	_, err := r.pool.Exec(ctx, q, args...)
 	return err
+}
+
+// UpdateUsername sets a user's public username slug. Returns ErrDuplicateUsername
+// if another user already has it.
+func (r *pgRepository) UpdateUsername(ctx context.Context, id, username string) error {
+	_, err := r.pool.Exec(ctx, `UPDATE users SET username=$1 WHERE id=$2`, username, id)
+	if err != nil {
+		if strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "duplicate key") {
+			return ErrDuplicateUsername
+		}
+		return fmt.Errorf("auth: update username: %w", err)
+	}
+	return nil
 }
 
 // UpsertOAuthUser inserts or updates an OAuth user by email.
