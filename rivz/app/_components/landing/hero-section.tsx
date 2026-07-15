@@ -22,7 +22,7 @@ export function HeroSection() {
     label: string;
     os: "mac" | "windows" | "other";
   }>({
-    url: "https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_universal.dmg",
+    url: "https://github.com/SachPlayZ/Fayde/releases/download/v0.2.0/Fayde_0.2.0_universal.dmg",
     label: "Download App",
     os: "other",
   });
@@ -31,8 +31,8 @@ export function HeroSection() {
     if (typeof window === "undefined") return;
     const ua = window.navigator.userAgent.toLowerCase();
 
-    const macUrl = "https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_universal.dmg";
-    const winUrl = "https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_x64-setup.exe";
+    const macUrl = "https://github.com/SachPlayZ/Fayde/releases/download/v0.2.0/Fayde_0.2.0_universal.dmg";
+    const winUrl = "https://github.com/SachPlayZ/Fayde/releases/download/v0.2.0/Fayde_0.2.0_x64-setup.exe";
 
     let linkConfig: { url: string; label: string; os: "mac" | "windows" | "other" };
 
@@ -265,14 +265,14 @@ export function HeroSection() {
             <div className="md:pr-1 text-left md:text-right">
               {downloadLink.os === "mac" ? (
                 <a
-                  href="https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_x64-setup.exe"
+                  href="https://github.com/SachPlayZ/Fayde/releases/download/v0.2.0/Fayde_0.2.0_x64-setup.exe"
                   className="text-zinc-600 hover:text-zinc-400 text-xs transition-colors duration-200"
                 >
                   Looking for Windows? <span className="underline">Download for Windows (.exe)</span>
                 </a>
               ) : downloadLink.os === "windows" ? (
                 <a
-                  href="https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_universal.dmg"
+                  href="https://github.com/SachPlayZ/Fayde/releases/download/v0.2.0/Fayde_0.2.0_universal.dmg"
                   className="text-zinc-600 hover:text-zinc-400 text-xs transition-colors duration-200"
                 >
                   Looking for macOS? <span className="underline">Download for macOS (.dmg)</span>
@@ -281,14 +281,14 @@ export function HeroSection() {
                 <div className="flex items-center gap-3 text-zinc-600 text-xs justify-start md:justify-end">
                   <span>Downloads:</span>
                   <a
-                    href="https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_universal.dmg"
+                    href="https://github.com/SachPlayZ/Fayde/releases/download/v0.2.0/Fayde_0.2.0_universal.dmg"
                     className="text-zinc-500 hover:text-zinc-300 underline transition-colors duration-200"
                   >
                     macOS (.dmg)
                   </a>
                   <span>|</span>
                   <a
-                    href="https://github.com/SachPlayZ/Fayde/releases/download/v0.1.0/Fayde_0.1.0_x64-setup.exe"
+                    href="https://github.com/SachPlayZ/Fayde/releases/download/v0.2.0/Fayde_0.2.0_x64-setup.exe"
                     className="text-zinc-500 hover:text-zinc-300 underline transition-colors duration-200"
                   >
                     Windows (.exe)
