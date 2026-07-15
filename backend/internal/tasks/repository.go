@@ -58,7 +58,7 @@ func NewRepository(pool *pgxpool.Pool) Repository {
 const taskSelect = `t.id, t.user_id, t.title, t.description, t.status, t.priority,
 	t.due_date, t.recurrence, t.recurrence_end, t.parent_task_id, t.assignee_id,
 	a.email AS assignee_email, t.external_event_id, t.sort_order, t.effort_points, t.project_id,
-	p.name AS project_name, t.created_at, t.updated_at`
+	p.title AS project_name, t.created_at, t.updated_at`
 
 // scanTask scans a task row (without tags/subtask counts — loaded separately).
 func scanTask(row interface {

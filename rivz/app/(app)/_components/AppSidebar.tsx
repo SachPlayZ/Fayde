@@ -13,7 +13,6 @@ import {
   FileText,
   Users,
   LayoutGrid,
-  Sparkles,
   Settings,
   ShieldCheck,
   Activity,
@@ -54,12 +53,11 @@ const navMain = [
   { href: "/tasks", label: "Tasks", icon: ClipboardList },
   { href: "/habits", label: "Habits", icon: Flame },
   { href: "/goals", label: "Goals", icon: Target },
-  { href: "/projects", label: "Projects", icon: FolderKanban },
   { href: "/sprints", label: "Sprints", icon: Zap },
   { href: "/docs", label: "Docs", icon: FileText },
   { href: "/friends", label: "Friends", icon: Users },
   { href: "/boards", label: "Boards", icon: LayoutGrid },
-  { href: "/showcase", label: "Showcase", icon: Sparkles },
+  { href: "/projects", label: "Projects", icon: FolderKanban },
 ];
 
 const navSecondary = [

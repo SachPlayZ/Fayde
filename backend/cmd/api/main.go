@@ -41,7 +41,6 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/search"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/server"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sharing"
-	"github.com/SachPlayZ/rivz-asn/backend/internal/showcase"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sprints"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/sse"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/subtasks"
@@ -173,11 +172,6 @@ func run() error {
 	depsHandler := dependencies.NewHandler(depsSvc)
 	tasksSvc.SetDependenciesService(depsSvc)
 
-	// Projects.
-	projectsRepo := projects.NewRepository(pool)
-	projectsSvc := projects.NewService(projectsRepo)
-	projectsHandler := projects.NewHandler(projectsSvc)
-
 	// Time tracking.
 	timeRepo := timetracking.NewRepository(pool)
 	timeSvc := timetracking.NewService(timeRepo)
@@ -235,10 +229,10 @@ func run() error {
 	sharingSvc := sharing.NewService(sharingRepo)
 	sharingHandler := sharing.NewHandler(sharingSvc, pool)
 
-	// Showcase.
-	showcaseRepo := showcase.NewRepository(pool)
-	showcaseSvc := showcase.NewService(showcaseRepo, s3Client, cfg.AppURL)
-	showcaseHandler := showcase.NewHandler(showcaseSvc, cfg.S3Bucket)
+	// Projects (published portfolio entries).
+	projectsRepo := projects.NewRepository(pool)
+	projectsSvc := projects.NewService(projectsRepo, s3Client, cfg.AppURL)
+	projectsHandler := projects.NewHandler(projectsSvc, cfg.S3Bucket)
 
 	// Pomodoro.
 	pomodoroRepo := pomodoro.NewRepository(pool)
@@ -350,7 +344,6 @@ func run() error {
 		habitsHandler, dashboardHandler, goalsHandler, remindersHandler,
 		automationsHandler, inboxHandler, calendarSyncHandler, telegramHandler,
 		friendsHandler, boardsHandler,
-		showcaseHandler, showcaseSvc,
 	)
 
 	srv := &http.Server{

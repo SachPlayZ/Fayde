@@ -99,41 +99,6 @@ func AuthenticateAny(jwtSecret string, apiTokenSvc APITokenValidator) func(http.
 	}
 }
 
-// ShowcaseTokenValidator is implemented by showcase.Service.
-type ShowcaseTokenValidator interface {
-	ValidateShowcaseToken(ctx context.Context, rawToken string) (userID string, err error)
-}
-
-// AuthenticateShowcaseToken guards routes that accept ONLY fayde_pub_-prefixed
-// showcase tokens — no JWT fallback. Kept separate from AuthenticateAny (which
-// only accepts JWTs and rivz_ tokens) so a showcase token, safe to embed on a
-// public site, can never reach any other authenticated route, and a rivz_ or
-// JWT credential can never mint/read via the showcase embed API.
-func AuthenticateShowcaseToken(svc ShowcaseTokenValidator) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			header := r.Header.Get("Authorization")
-			if header == "" || !strings.HasPrefix(header, "Bearer ") {
-				httputil.Error(w, http.StatusUnauthorized, "missing or invalid authorization header")
-				return
-			}
-			tokenStr := strings.TrimPrefix(header, "Bearer ")
-			if !strings.HasPrefix(tokenStr, "fayde_pub_") {
-				httputil.Error(w, http.StatusUnauthorized, "invalid showcase token")
-				return
-			}
-			userID, err := svc.ValidateShowcaseToken(r.Context(), tokenStr)
-			if err != nil || userID == "" {
-				httputil.Error(w, http.StatusUnauthorized, "invalid showcase token")
-				return
-			}
-			ctx := context.WithValue(r.Context(), userIDKey, userID)
-			ctx = context.WithValue(ctx, userRoleKey, "user")
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	}
-}
-
 // RequireAdmin is middleware that returns 403 if the user's role is not "admin".
 // Must be used after Authenticate.
 func RequireAdmin(next http.Handler) http.Handler {

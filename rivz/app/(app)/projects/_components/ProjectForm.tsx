@@ -2,16 +2,16 @@
 import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { showcaseEntrySchema, type ShowcaseEntryInput } from "@/lib/schemas";
+import { projectSchema, type ProjectInput } from "@/lib/schemas";
 import {
-  useCreateShowcaseEntry,
-  useUpdateShowcaseEntry,
-  useUploadShowcaseLogo,
-  useUploadShowcaseBanner,
-  useDeleteShowcaseLogo,
-  useDeleteShowcaseBanner,
-  type ShowcaseEntry,
-} from "@/lib/showcase-hooks";
+  useCreateProject,
+  useUpdateProject,
+  useUploadProjectLogo,
+  useUploadProjectBanner,
+  useDeleteProjectLogo,
+  useDeleteProjectBanner,
+  type Project,
+} from "@/lib/projects-hooks";
 import { ApiError } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,21 +31,21 @@ import { toast } from "sonner";
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  entry?: ShowcaseEntry;
+  entry?: Project;
 };
 
-export function ShowcaseEntryForm({ open, onOpenChange, entry }: Props) {
+export function ProjectForm({ open, onOpenChange, entry }: Props) {
   const isEdit = !!entry;
-  const createEntry = useCreateShowcaseEntry();
-  const updateEntry = useUpdateShowcaseEntry();
-  const uploadLogo = useUploadShowcaseLogo();
-  const uploadBanner = useUploadShowcaseBanner();
-  const deleteLogo = useDeleteShowcaseLogo();
-  const deleteBanner = useDeleteShowcaseBanner();
+  const createEntry = useCreateProject();
+  const updateEntry = useUpdateProject();
+  const uploadLogo = useUploadProjectLogo();
+  const uploadBanner = useUploadProjectBanner();
+  const deleteLogo = useDeleteProjectLogo();
+  const deleteBanner = useDeleteProjectBanner();
 
   // Tracks the entry once it exists server-side (immediately after create),
   // so image uploads can happen in the same dialog session without reopening.
-  const [savedEntry, setSavedEntry] = useState<ShowcaseEntry | undefined>(entry);
+  const [savedEntry, setSavedEntry] = useState<Project | undefined>(entry);
   useEffect(() => {
     if (open) Promise.resolve().then(() => setSavedEntry(entry));
   }, [open, entry]);
@@ -57,8 +57,8 @@ export function ShowcaseEntryForm({ open, onOpenChange, entry }: Props) {
     control,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<ShowcaseEntryInput>({
-    resolver: zodResolver(showcaseEntrySchema),
+  } = useForm<ProjectInput>({
+    resolver: zodResolver(projectSchema),
     defaultValues: {
       title: entry?.title ?? "",
       tagline: entry?.tagline ?? "",
@@ -79,7 +79,7 @@ export function ShowcaseEntryForm({ open, onOpenChange, entry }: Props) {
     onOpenChange(false);
   };
 
-  const onSubmit = async (data: ShowcaseEntryInput) => {
+  const onSubmit = async (data: ProjectInput) => {
     const payload = {
       ...data,
       demo_url: data.demo_url || null,
@@ -105,7 +105,7 @@ export function ShowcaseEntryForm({ open, onOpenChange, entry }: Props) {
     <Dialog open={open} onOpenChange={(o) => (o ? onOpenChange(true) : handleClose())}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Edit project" : "New showcase project"}</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit project" : "New project"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">

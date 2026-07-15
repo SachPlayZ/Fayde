@@ -11,6 +11,7 @@ import { useTags, useCreateTag, useAddTagToTask, useRemoveTagFromTask } from "@/
 import { useComments, useCreateComment, useUpdateComment, useDeleteComment } from "@/lib/comments-hooks";
 import { useTaskDependencies, useAddDependency, useRemoveDependency } from "@/lib/dependencies-hooks";
 import { useAdminUsers } from "@/lib/admin-hooks";
+import { useProjects } from "@/lib/projects-hooks";
 import { useAuth } from "@/lib/auth-context";
 import { useShareToken, useCreateShareToken, useDeleteShareToken } from "@/lib/sharing-hooks";
 import { useBoards, useShareTaskToBoard, useUnshareTaskFromBoard } from "@/lib/boards-hooks";
@@ -88,6 +89,7 @@ import {
   Square,
   Sliders,
   LayoutGrid,
+  FolderKanban,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -324,6 +326,7 @@ export function TaskDetailClient({ id }: { id: string }) {
   const [status, setStatus] = useState<Task["status"]>("todo");
   const [priority, setPriority] = useState<Task["priority"]>("medium");
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [dueTime, setDueTime] = useState("");
   const [recurrence, setRecurrence] = useState<string | null>(null);
@@ -395,6 +398,7 @@ export function TaskDetailClient({ id }: { id: string }) {
   const { data: activityLogs = [], isLoading: activityLoading } = useTaskActivity(id, openedTabs.has("activity"));
 
   const { data: adminUsers = [] } = useAdminUsers(user?.role === "admin");
+  const { data: allProjects = [] } = useProjects();
 
   // Sharing hooks
   const { data: shareToken } = useShareToken(id);
@@ -447,6 +451,7 @@ export function TaskDetailClient({ id }: { id: string }) {
       setStatus(task.status);
       setPriority(task.priority);
       setAssigneeId(task.assignee_id);
+      setProjectId(task.project_id);
       {
         const due = task.due_date ? parseISO(task.due_date) : undefined;
         setSelectedDate(due);
@@ -1178,6 +1183,29 @@ export function TaskDetailClient({ id }: { id: string }) {
                   {user && <SelectItem value={user.id}>{user.email} (me)</SelectItem>}
                   {adminUsers.filter((u) => u.id !== user?.id).map((u) => (
                     <SelectItem key={u.id} value={u.id}>{u.email}</SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </SidebarRow>
+
+          <SidebarRow label="Project" icon={<FolderKanban className="size-3" />}>
+            <Select
+              value={projectId ?? "none"}
+              onValueChange={(v) => {
+                const val = v === "none" ? null : v;
+                setProjectId(val);
+                savePatch({ project_id: val });
+              }}
+            >
+              <SelectTrigger className="w-full h-8 text-sm">
+                <SelectValue placeholder="No project" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="none">No project</SelectItem>
+                  {allProjects.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
                   ))}
                 </SelectGroup>
               </SelectContent>

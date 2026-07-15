@@ -23,9 +23,9 @@ type PublicEntry = {
   banner_url: string | null;
 };
 
-type PublicShowcase = {
+type PublicProjects = {
   owner_display_name: string;
-  entries: PublicEntry[];
+  projects: PublicEntry[];
 };
 
 function absoluteImageURL(url: string | null): string | null {
@@ -33,8 +33,8 @@ function absoluteImageURL(url: string | null): string | null {
   return url.startsWith("http") ? url : `${BASE_URL}${url}`;
 }
 
-export function PublicShowcaseClient({ slug }: { slug: string }) {
-  const [data, setData] = useState<PublicShowcase | null>(null);
+export function PublicProjectsClient({ slug }: { slug: string }) {
+  const [data, setData] = useState<PublicProjects | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,8 +42,8 @@ export function PublicShowcaseClient({ slug }: { slug: string }) {
     if (!slug) return;
     fetch(`${BASE_URL}/p/${slug}`)
       .then((res) => {
-        if (!res.ok) throw new Error(res.status === 404 ? "Showcase not found" : "Failed to load showcase");
-        return res.json() as Promise<PublicShowcase>;
+        if (!res.ok) throw new Error(res.status === 404 ? "Projects page not found" : "Failed to load projects");
+        return res.json() as Promise<PublicProjects>;
       })
       .then((d) => {
         setData(d);
@@ -70,7 +70,7 @@ export function PublicShowcaseClient({ slug }: { slug: string }) {
         {loading ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Loading showcase…</p>
+            <p className="text-sm text-muted-foreground">Loading projects…</p>
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center py-24 gap-3 text-center">
@@ -81,18 +81,18 @@ export function PublicShowcaseClient({ slug }: { slug: string }) {
           <div className="flex flex-col gap-8 animate-in fade-in-0 slide-in-from-bottom-3 duration-400">
             <div>
               <h1 className="text-2xl font-bold tracking-tight leading-tight">
-                {data.owner_display_name}&rsquo;s Showcase
+                {data.owner_display_name}&rsquo;s Projects
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {data.entries.length} project{data.entries.length === 1 ? "" : "s"}
+                {data.projects.length} project{data.projects.length === 1 ? "" : "s"}
               </p>
             </div>
 
-            {data.entries.length === 0 ? (
+            {data.projects.length === 0 ? (
               <p className="text-sm text-muted-foreground">No projects published yet.</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {data.entries.map((entry) => (
+                {data.projects.map((entry) => (
                   <div key={entry.id} className="rounded-xl border border-border bg-card overflow-hidden">
                     {entry.banner_url ? (
                       // eslint-disable-next-line @next/next/no-img-element

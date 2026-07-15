@@ -48,12 +48,6 @@ import { Workflow, Calendar } from "lucide-react";
 import { AutomationsTab } from "./_components/AutomationsTab";
 import { useAPITokens, useCreateAPIToken, useDeleteAPIToken } from "@/lib/apitokens-hooks";
 import { ApiError } from "@/lib/api";
-import {
-  useShowcaseTokens,
-  useCreateShowcaseToken,
-  useDeleteShowcaseToken,
-} from "@/lib/showcase-hooks";
-import { Sparkles } from "lucide-react";
 import { useTOTPStatus, useSetupTOTP, useEnableTOTP, useDisableTOTP } from "@/lib/totp-hooks";
 import type { TOTPSetup } from "@/lib/totp-hooks";
 import { useWebhooks, useCreateWebhook, useDeleteWebhook } from "@/lib/webhooks-hooks";
@@ -200,181 +194,6 @@ function APITokensTab() {
         <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl border border-border bg-card">
           <Key className="size-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">No API tokens yet</p>
-        </div>
-      ) : (
-        <div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
-          {list.map((token) => (
-            <div key={token.id} className="flex items-center justify-between px-4 py-3 gap-3">
-              <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-sm font-medium truncate">{token.name}</span>
-                <span className="text-xs font-mono text-muted-foreground">
-                  {token.token_prefix}••••••••
-                </span>
-              </div>
-              <div className="flex items-center gap-4 shrink-0">
-                <div className="flex flex-col items-end gap-0.5">
-                  <span className="text-[11px] text-muted-foreground">
-                    {token.last_used_at
-                      ? `Used ${formatDistanceToNow(new Date(token.last_used_at), { addSuffix: true })}`
-                      : "Never used"}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground/60">
-                    Created {format(new Date(token.created_at), "MMM d, yyyy")}
-                  </span>
-                </div>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => handleDelete(token.id)}
-                  disabled={deleteToken.isPending}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── Showcase Tokens Tab ────────────────────────────────────────────────────
-
-function ShowcaseTokensTab() {
-  const { data: tokens, isLoading } = useShowcaseTokens();
-  const createToken = useCreateShowcaseToken();
-  const deleteToken = useDeleteShowcaseToken();
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [tokenName, setTokenName] = useState("");
-  const [createdToken, setCreatedToken] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-
-  const handleCreate = () => {
-    if (!tokenName.trim()) return;
-    createToken.mutate(
-      { name: tokenName.trim() },
-      {
-        onSuccess: (data) => {
-          setCreatedToken(data.token);
-          setTokenName("");
-          toast.success("Showcase token created");
-        },
-        onError: () => toast.error("Failed to create token"),
-      }
-    );
-  };
-
-  const handleCopy = () => {
-    if (!createdToken) return;
-    navigator.clipboard.writeText(createdToken);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDialogClose = (open: boolean) => {
-    if (!open) {
-      setCreatedToken(null);
-      setTokenName("");
-    }
-    setCreateOpen(open);
-  };
-
-  const handleDelete = (id: string) => {
-    deleteToken.mutate(id, {
-      onSuccess: () => toast.success("Token deleted"),
-      onError: () => toast.error("Failed to delete token"),
-    });
-  };
-
-  const list = tokens ?? [];
-
-  return (
-    <div className="flex flex-col gap-4 mt-4">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Read-only tokens for embedding your Showcase on external sites or agents.
-          Unlike API tokens, these can only read your published projects.
-        </p>
-        <Dialog open={createOpen} onOpenChange={handleDialogClose}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1.5">
-              <Plus className="w-3.5 h-3.5" />
-              Create token
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create showcase token</DialogTitle>
-            </DialogHeader>
-            {createdToken ? (
-              <div className="flex flex-col gap-4 py-2">
-                <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/8 p-3">
-                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                  <p className="text-xs text-amber-600 dark:text-amber-400">
-                    Copy this token now — it will never be shown again.
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 rounded-lg border border-border bg-muted px-3 py-2 text-xs font-mono break-all">
-                    {createdToken}
-                  </code>
-                  <Button size="icon-sm" variant="outline" onClick={handleCopy}>
-                    {copied ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3 py-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="showcase-token-name">Token name</Label>
-                  <Input
-                    id="showcase-token-name"
-                    placeholder="e.g. my portfolio site"
-                    value={tokenName}
-                    onChange={(e) => setTokenName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleCreate()}
-                  />
-                </div>
-              </div>
-            )}
-            <DialogFooter>
-              {createdToken ? (
-                <Button onClick={() => handleDialogClose(false)}>Done</Button>
-              ) : (
-                <>
-                  <Button variant="outline" onClick={() => handleDialogClose(false)}>
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={handleCreate}
-                    disabled={!tokenName.trim() || createToken.isPending}
-                  >
-                    {createToken.isPending ? "Creating..." : "Create"}
-                  </Button>
-                </>
-              )}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      {isLoading ? (
-        <div className="flex flex-col gap-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-14 rounded-xl border border-border bg-card animate-pulse" />
-          ))}
-        </div>
-      ) : list.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl border border-border bg-card">
-          <Sparkles className="size-8 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">No showcase tokens yet</p>
         </div>
       ) : (
         <div className="flex flex-col divide-y divide-border rounded-xl border border-border bg-card overflow-hidden">
@@ -1536,9 +1355,9 @@ function ProfileTab() {
       </div>
 
       <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3">
-        <h3 className="text-sm font-semibold">Public Showcase URL</h3>
+        <h3 className="text-sm font-semibold">Public Projects URL</h3>
         <p className="text-xs text-muted-foreground -mt-1.5">
-          Pick a username to get a shareable link to your public Showcase page.
+          Pick a username to get a shareable link to your public Projects page.
         </p>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="profile-username">Username</Label>
@@ -1565,7 +1384,7 @@ function ProfileTab() {
           {usernameError && <p className="text-xs text-rose-500">{usernameError}</p>}
           {me.username && !usernameDirty && (
             <p className="text-xs text-muted-foreground">
-              Your Showcase is live at{" "}
+              Your Projects page is live at{" "}
               <span className="font-mono text-foreground">/p/{me.username}</span>
             </p>
           )}
@@ -1605,10 +1424,6 @@ export default function SettingsPage() {
             <Key className="size-3.5 mr-1.5" />
             API Tokens
           </TabsTrigger>
-          <TabsTrigger value="showcase-tokens" className="rounded-lg text-xs">
-            <Sparkles className="size-3.5 mr-1.5" />
-            Showcase Tokens
-          </TabsTrigger>
           <TabsTrigger value="2fa" className="rounded-lg text-xs">
             <Shield className="size-3.5 mr-1.5" />
             2FA
@@ -1643,9 +1458,6 @@ export default function SettingsPage() {
         </TabsContent>
         <TabsContent value="tokens">
           <APITokensTab />
-        </TabsContent>
-        <TabsContent value="showcase-tokens">
-          <ShowcaseTokensTab />
         </TabsContent>
         <TabsContent value="2fa">
           <TwoFATab />

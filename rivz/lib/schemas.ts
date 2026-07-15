@@ -22,7 +22,7 @@ export const taskSchema = z.object({
   assignee_id: z.string().optional().nullable(),
 });
 
-export const showcaseEntrySchema = z.object({
+export const projectSchema = z.object({
   title: z.string().min(1, "Title required"),
   tagline: z.string().max(200, "Keep it to one sentence"),
   problem: z.string(),
@@ -44,4 +44,4 @@ export const usernameSchema = z
 export type LoginInput = z.infer<typeof loginSchema>;
 export type SignupInput = z.infer<typeof signupSchema>;
 export type TaskInput = z.infer<typeof taskSchema>;
-export type ShowcaseEntryInput = z.infer<typeof showcaseEntrySchema>;
+export type ProjectInput = z.infer<typeof projectSchema>;

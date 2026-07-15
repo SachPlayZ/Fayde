@@ -3,15 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Trash2, ExternalLink, GitBranch, PlayCircle, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ShowcaseEntry } from "@/lib/showcase-hooks";
+import type { Project } from "@/lib/projects-hooks";
 
 type Props = {
-  entry: ShowcaseEntry;
+  entry: Project;
   onEdit: () => void;
   onDelete: () => void;
 };
 
-export function ShowcaseEntryCard({ entry, onEdit, onDelete }: Props) {
+export function ProjectCard({ entry, onEdit, onDelete }: Props) {
   return (
     <div className="rounded-xl border border-border bg-card overflow-hidden group">
       {entry.banner_url ? (

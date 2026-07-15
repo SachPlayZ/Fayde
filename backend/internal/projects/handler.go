@@ -2,7 +2,6 @@ package projects
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 
@@ -12,97 +11,109 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+var validate = validator.New()
+
+const maxImageUploadSize = 5 << 20 // 5 MB
+
+// Handler handles HTTP requests for project entries, images, and the public
+// page/embed routes.
 type Handler struct {
 	svc      *Service
-	validate *validator.Validate
+	s3Bucket string
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc, validate: validator.New()}
+// NewHandler creates a new projects Handler. s3Bucket is empty when S3 isn't
+// configured — image endpoints then respond 501 rather than panicking on a
+// nil storage client.
+func NewHandler(svc *Service, s3Bucket string) *Handler {
+	return &Handler{svc: svc, s3Bucket: s3Bucket}
 }
 
-func validationFields(errs validator.ValidationErrors) map[string]string {
-	fields := make(map[string]string, len(errs))
-	for _, e := range errs {
-		fields[strings.ToLower(e.Field())] = e.Tag()
+func (h *Handler) checkConfigured(w http.ResponseWriter) bool {
+	if h.s3Bucket == "" {
+		httputil.Error(w, http.StatusNotImplemented, "project image uploads not configured")
+		return false
 	}
-	return fields
+	return true
 }
+
+func writeValidationErr(w http.ResponseWriter, err error) {
+	fields := map[string]string{}
+	if verrs, ok := err.(validator.ValidationErrors); ok {
+		for _, e := range verrs {
+			fields[strings.ToLower(e.Field())] = e.Tag()
+		}
+	}
+	httputil.ValidationError(w, fields)
+}
+
+// --- Authenticated CRUD ---
 
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-	projects, err := h.svc.List(r.Context(), userID)
+	entries, err := h.svc.List(r.Context(), userID)
 	if err != nil {
 		httputil.Error(w, http.StatusInternalServerError, "failed to list projects")
 		return
 	}
-	httputil.JSON(w, http.StatusOK, projects)
+	httputil.JSON(w, http.StatusOK, entries)
 }
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
 	var req CreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.Error(w, http.StatusBadRequest, "invalid request body")
+		httputil.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if errs := h.validate.Struct(req); errs != nil {
-		httputil.ValidationError(w, validationFields(errs.(validator.ValidationErrors)))
+	if err := validate.Struct(req); err != nil {
+		writeValidationErr(w, err)
 		return
 	}
-	p, err := h.svc.Create(r.Context(), userID, req)
+	e, err := h.svc.Create(r.Context(), userID, req)
 	if err != nil {
 		httputil.Error(w, http.StatusInternalServerError, "failed to create project")
 		return
 	}
-	httputil.JSON(w, http.StatusCreated, p)
+	httputil.JSON(w, http.StatusCreated, e)
+}
+
+func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	id := chi.URLParam(r, "id")
+	e, err := h.svc.Get(r.Context(), id, userID)
+	if err != nil {
+		httputil.Error(w, http.StatusNotFound, "project not found")
+		return
+	}
+	httputil.JSON(w, http.StatusOK, e)
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
 	id := chi.URLParam(r, "id")
 	var req UpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.Error(w, http.StatusBadRequest, "invalid request body")
+		httputil.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
-	if errs := h.validate.Struct(req); errs != nil {
-		httputil.ValidationError(w, validationFields(errs.(validator.ValidationErrors)))
-		return
-	}
-	p, err := h.svc.Update(r.Context(), id, userID, req)
+	e, err := h.svc.Update(r.Context(), id, userID, req)
 	if err != nil {
-		if errors.Is(err, ErrNotFound) {
+		if err == ErrNotFound {
 			httputil.Error(w, http.StatusNotFound, "project not found")
 			return
 		}
 		httputil.Error(w, http.StatusInternalServerError, "failed to update project")
 		return
 	}
-	httputil.JSON(w, http.StatusOK, p)
+	httputil.JSON(w, http.StatusOK, e)
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	userID := auth.UserIDFromContext(r.Context())
-	if userID == "" {
-		httputil.Error(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
 	id := chi.URLParam(r, "id")
 	if err := h.svc.Delete(r.Context(), id, userID); err != nil {
-		if errors.Is(err, ErrNotFound) {
+		if err == ErrNotFound {
 			httputil.Error(w, http.StatusNotFound, "project not found")
 			return
 		}
@@ -110,4 +121,159 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Images ---
+
+func parseImageUpload(w http.ResponseWriter, r *http.Request) (file interface {
+	Read([]byte) (int, error)
+	Close() error
+}, filename, contentType string, size int64, ok bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxImageUploadSize)
+	if err := r.ParseMultipartForm(maxImageUploadSize); err != nil {
+		httputil.Error(w, http.StatusBadRequest, "file too large or invalid multipart form")
+		return nil, "", "", 0, false
+	}
+	f, header, err := r.FormFile("file")
+	if err != nil {
+		httputil.Error(w, http.StatusBadRequest, "missing file field")
+		return nil, "", "", 0, false
+	}
+	ct := header.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "image/") {
+		f.Close()
+		httputil.Error(w, http.StatusBadRequest, "file must be an image")
+		return nil, "", "", 0, false
+	}
+	return f, header.Filename, ct, header.Size, true
+}
+
+func (h *Handler) UploadLogo(w http.ResponseWriter, r *http.Request) {
+	if !h.checkConfigured(w) {
+		return
+	}
+	userID := auth.UserIDFromContext(r.Context())
+	id := chi.URLParam(r, "id")
+	file, filename, contentType, size, ok := parseImageUpload(w, r)
+	if !ok {
+		return
+	}
+	defer file.Close()
+	e, err := h.svc.UploadLogo(r.Context(), id, userID, filename, contentType, file, size)
+	if err != nil {
+		if err == ErrNotFound {
+			httputil.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		httputil.Error(w, http.StatusInternalServerError, "failed to upload logo")
+		return
+	}
+	httputil.JSON(w, http.StatusOK, e)
+}
+
+func (h *Handler) UploadBanner(w http.ResponseWriter, r *http.Request) {
+	if !h.checkConfigured(w) {
+		return
+	}
+	userID := auth.UserIDFromContext(r.Context())
+	id := chi.URLParam(r, "id")
+	file, filename, contentType, size, ok := parseImageUpload(w, r)
+	if !ok {
+		return
+	}
+	defer file.Close()
+	e, err := h.svc.UploadBanner(r.Context(), id, userID, filename, contentType, file, size)
+	if err != nil {
+		if err == ErrNotFound {
+			httputil.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		httputil.Error(w, http.StatusInternalServerError, "failed to upload banner")
+		return
+	}
+	httputil.JSON(w, http.StatusOK, e)
+}
+
+func (h *Handler) DeleteLogo(w http.ResponseWriter, r *http.Request) {
+	if !h.checkConfigured(w) {
+		return
+	}
+	userID := auth.UserIDFromContext(r.Context())
+	id := chi.URLParam(r, "id")
+	if err := h.svc.DeleteLogo(r.Context(), id, userID); err != nil {
+		if err == ErrNotFound {
+			httputil.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		httputil.Error(w, http.StatusInternalServerError, "failed to delete logo")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) DeleteBanner(w http.ResponseWriter, r *http.Request) {
+	if !h.checkConfigured(w) {
+		return
+	}
+	userID := auth.UserIDFromContext(r.Context())
+	id := chi.URLParam(r, "id")
+	if err := h.svc.DeleteBanner(r.Context(), id, userID); err != nil {
+		if err == ErrNotFound {
+			httputil.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		httputil.Error(w, http.StatusInternalServerError, "failed to delete banner")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// --- Public (no auth) ---
+
+func (h *Handler) PublicList(w http.ResponseWriter, r *http.Request) {
+	slug := chi.URLParam(r, "slug")
+	entries, err := h.svc.PublicList(r.Context(), slug)
+	if err != nil {
+		httputil.Error(w, http.StatusNotFound, "not found")
+		return
+	}
+	httputil.JSON(w, http.StatusOK, entries)
+}
+
+func (h *Handler) LogoRedirect(w http.ResponseWriter, r *http.Request) {
+	if !h.checkConfigured(w) {
+		return
+	}
+	id := chi.URLParam(r, "id")
+	url, err := h.svc.PresignLogo(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, http.StatusNotFound, "logo not found")
+		return
+	}
+	http.Redirect(w, r, url, http.StatusFound)
+}
+
+func (h *Handler) BannerRedirect(w http.ResponseWriter, r *http.Request) {
+	if !h.checkConfigured(w) {
+		return
+	}
+	id := chi.URLParam(r, "id")
+	url, err := h.svc.PresignBanner(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, http.StatusNotFound, "banner not found")
+		return
+	}
+	http.Redirect(w, r, url, http.StatusFound)
+}
+
+// --- Embed API (AuthenticateAny — accepts JWT or account API tokens) ---
+
+func (h *Handler) Embed(w http.ResponseWriter, r *http.Request) {
+	userID := auth.UserIDFromContext(r.Context())
+	entries, err := h.svc.List(r.Context(), userID)
+	if err != nil {
+		httputil.Error(w, http.StatusInternalServerError, "failed to list projects")
+		return
+	}
+	httputil.JSON(w, http.StatusOK, entries)
 }

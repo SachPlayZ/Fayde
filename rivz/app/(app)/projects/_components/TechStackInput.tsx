@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Plus, X, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { TechItem } from "@/lib/showcase-hooks";
+import type { TechItem } from "@/lib/projects-hooks";
 
 type Props = {
   value: TechItem[];
