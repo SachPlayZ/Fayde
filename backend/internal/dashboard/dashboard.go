@@ -9,6 +9,7 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/auth"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/habits"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/httputil"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/leetcode"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -31,15 +32,17 @@ type Summary struct {
 	TimeThisWeekMin   int             `json:"time_this_week_minutes"`
 	PomodorosToday    int             `json:"pomodoros_today"`
 	Habits            []*habits.Habit `json:"habits"`
+	LeetcodeDueToday  int             `json:"leetcode_due_today"`
 }
 
 type Service struct {
-	pool      *pgxpool.Pool
-	habitsSvc *habits.Service
+	pool        *pgxpool.Pool
+	habitsSvc   *habits.Service
+	leetcodeSvc *leetcode.Service
 }
 
-func NewService(pool *pgxpool.Pool, habitsSvc *habits.Service) *Service {
-	return &Service{pool: pool, habitsSvc: habitsSvc}
+func NewService(pool *pgxpool.Pool, habitsSvc *habits.Service, leetcodeSvc *leetcode.Service) *Service {
+	return &Service{pool: pool, habitsSvc: habitsSvc, leetcodeSvc: leetcodeSvc}
 }
 
 // Summary builds the dashboard aggregate. todayStart/todayEnd mark the
@@ -106,6 +109,10 @@ func (s *Service) Summary(ctx context.Context, userID, todayStart, todayEnd stri
 
 	if hs, err := s.habitsSvc.List(ctx, userID); err == nil {
 		sum.Habits = hs
+	}
+
+	if n, err := s.leetcodeSvc.DueTodayCount(ctx, userID); err == nil {
+		sum.LeetcodeDueToday = n
 	}
 
 	return sum, nil

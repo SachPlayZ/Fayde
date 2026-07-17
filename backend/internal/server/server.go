@@ -22,6 +22,7 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/habits"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/httputil"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/inbox"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/leetcode"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/notes"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/notifications"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/pomodoro"
@@ -80,6 +81,7 @@ func New(
 	notesHandler *notes.Handler,
 	searchHandler *search.Handler,
 	habitsHandler *habits.Handler,
+	leetcodeHandler *leetcode.Handler,
 	dashboardHandler *dashboard.Handler,
 	goalsHandler *goals.Handler,
 	remindersHandler *reminders.Handler,
@@ -319,6 +321,16 @@ func New(
 		r.Delete("/habits/{id}", habitsHandler.Delete)
 		r.Post("/habits/{id}/toggle", habitsHandler.Toggle)
 		r.Get("/habits/{id}/logs", habitsHandler.Logs)
+
+		// LeetCode + FSRS spaced repetition.
+		r.Get("/leetcode/problems", leetcodeHandler.List)
+		r.Post("/leetcode/problems", leetcodeHandler.Create)
+		r.Get("/leetcode/problems/{id}", leetcodeHandler.Get)
+		r.Patch("/leetcode/problems/{id}", leetcodeHandler.Update)
+		r.Delete("/leetcode/problems/{id}", leetcodeHandler.Delete)
+		r.Post("/leetcode/problems/{id}/review", leetcodeHandler.Review)
+		r.Get("/leetcode/queue", leetcodeHandler.Queue)
+		r.Get("/leetcode/stats", leetcodeHandler.Stats)
 
 		// Global search.
 		r.Get("/search", searchHandler.Search)

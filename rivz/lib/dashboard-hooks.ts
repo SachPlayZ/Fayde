@@ -21,6 +21,7 @@ export type DashboardSummary = {
   time_this_week_minutes: number;
   pomodoros_today: number;
   habits: Habit[];
+  leetcode_due_today: number;
 };
 
 export function useDashboard() {

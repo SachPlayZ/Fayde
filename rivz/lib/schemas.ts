@@ -35,6 +35,16 @@ export const projectSchema = z.object({
   live_url: z.union([z.string().url("Must be a valid URL"), z.literal("")]).nullable(),
 });
 
+export const leetcodeProblemSchema = z.object({
+  title: z.string().min(1, "Title required"),
+  lc_number: z.number().int().positive().optional().nullable(),
+  slug: z.string().optional().nullable(),
+  url: z.union([z.string().url("Must be a valid URL"), z.literal("")]).optional().nullable(),
+  difficulty: z.enum(["easy", "medium", "hard"]),
+  topics: z.array(z.string()),
+  notes: z.string().optional(),
+});
+
 export const usernameSchema = z
   .string()
   .min(3, "At least 3 characters")
@@ -45,3 +55,4 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type SignupInput = z.infer<typeof signupSchema>;
 export type TaskInput = z.infer<typeof taskSchema>;
 export type ProjectInput = z.infer<typeof projectSchema>;
+export type LeetcodeProblemInput = z.infer<typeof leetcodeProblemSchema>;

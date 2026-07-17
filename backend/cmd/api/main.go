@@ -31,6 +31,7 @@ import (
 	"github.com/SachPlayZ/rivz-asn/backend/internal/groq"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/habits"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/inbox"
+	"github.com/SachPlayZ/rivz-asn/backend/internal/leetcode"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/notes"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/notifications"
 	"github.com/SachPlayZ/rivz-asn/backend/internal/pomodoro"
@@ -277,8 +278,13 @@ func run() error {
 	habitsSvc := habits.NewService(habitsRepo)
 	habitsHandler := habits.NewHandler(habitsSvc)
 
+	// LeetCode + FSRS spaced repetition.
+	leetcodeRepo := leetcode.NewRepository(pool)
+	leetcodeSvc := leetcode.NewService(leetcodeRepo)
+	leetcodeHandler := leetcode.NewHandler(leetcodeSvc)
+
 	// Personal dashboard.
-	dashboardSvc := dashboard.NewService(pool, habitsSvc)
+	dashboardSvc := dashboard.NewService(pool, habitsSvc, leetcodeSvc)
 	dashboardHandler := dashboard.NewHandler(dashboardSvc)
 
 	// Notes / Docs.
@@ -341,7 +347,7 @@ func run() error {
 		cfHandler, watchersHandler, sfHandler, apiTokensHandler, totpHandler,
 		webhooksHandler, githubHandler, sharingHandler, pomodoroHandler,
 		groqHandler, apiTokensSvc, webpushHandler, notesHandler, searchHandler,
-		habitsHandler, dashboardHandler, goalsHandler, remindersHandler,
+		habitsHandler, leetcodeHandler, dashboardHandler, goalsHandler, remindersHandler,
 		automationsHandler, inboxHandler, calendarSyncHandler, telegramHandler,
 		friendsHandler, boardsHandler,
 	)
