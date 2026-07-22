@@ -1,7 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
 import {
   useBoard,
   useAddBoardTask,
@@ -116,9 +115,6 @@ export function BoardDetailClient({ id }: { id: string }) {
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
 
-  // Today's date for completion lookup
-  const today = format(new Date(), "yyyy-MM-dd");
-
   // Personal tasks for accordion
   const { data: myTasksData } = useTasks({
     status: "todo",
@@ -165,11 +161,13 @@ export function BoardDetailClient({ id }: { id: string }) {
   const sharedTasks = board.shared_tasks ?? [];
   const sharedTaskIds = new Set(sharedTasks.map((t) => t.task_id));
 
-  // Build a set for quick lookup: "taskId:userId" -> true if completed today
+  // Build a set for quick lookup: "taskId:userId" -> true if completed today.
+  // `completions` is already server-filtered to today's date; re-filtering here
+  // by the browser's local date string caused mismatches against the server's
+  // UTC-anchored completion_date (e.g. for IST users near midnight), silently
+  // discarding real completions.
   const completedSet = new Set(
-    completions
-      .filter((c) => c.completion_date === today)
-      .map((c) => `${c.board_task_id}:${c.user_id}`)
+    completions.map((c) => `${c.board_task_id}:${c.user_id}`)
   );
 
   // Friends not already on the board

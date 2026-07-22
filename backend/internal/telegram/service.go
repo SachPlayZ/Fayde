@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ type Service struct {
 	token      string
 	botName    string
 	groqClient *groq.Client
+	loc        *time.Location
 
 	mu        sync.Mutex
 	authCodes map[string]authCodeEntry // code → {userID, expiresAt}
@@ -40,13 +42,21 @@ type authCodeEntry struct {
 	expiresAt time.Time
 }
 
-// NewService creates a Telegram Service.
-func NewService(repo Repository, tasksSvc TaskCreator, botToken string, groqClient *groq.Client) *Service {
+// NewService creates a Telegram Service. tz is the IANA timezone (e.g.
+// "Asia/Kolkata") used to interpret dates/times parsed from natural-language
+// messages, since the bot has no per-request browser timezone the way the
+// web frontend does. Falls back to UTC if tz is empty or invalid.
+func NewService(repo Repository, tasksSvc TaskCreator, botToken, tz string, groqClient *groq.Client) *Service {
+	loc, err := time.LoadLocation(tz)
+	if err != nil || loc == nil {
+		loc = time.UTC
+	}
 	return &Service{
 		repo:       repo,
 		tasksSvc:   tasksSvc,
 		token:      botToken,
 		groqClient: groqClient,
+		loc:        loc,
 		authCodes:  make(map[string]authCodeEntry),
 	}
 }
@@ -132,7 +142,7 @@ func (s *Service) HandleMessage(ctx context.Context, chatID int64, username, tex
 	var req tasks.CreateRequest
 	isAI := false
 	if s.groqClient != nil {
-		req = s.parseWithAI(ctx, text)
+		req = s.parseWithAI(ctx, text, s.userLocation(ctx, userID))
 		isAI = true
 	} else {
 		req = tasks.CreateRequest{
@@ -174,23 +184,40 @@ func (s *Service) HandleMessage(ctx context.Context, chatID int64, username, tex
 	s.sendMessage(chatID, msg)
 }
 
+// userLocation resolves userID's timezone preference to a *time.Location,
+// falling back to the bot's configured default (s.loc) if the user hasn't
+// set one, or if it fails to look up or parse.
+func (s *Service) userLocation(ctx context.Context, userID string) *time.Location {
+	tz, err := s.repo.GetUserTimezone(ctx, userID)
+	if err != nil || tz == "" {
+		return s.loc
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return s.loc
+	}
+	return loc
+}
+
 type parsedTask struct {
 	Title                    string `json:"title"`
 	Description              string `json:"description"`
 	Priority                 string `json:"priority"`
 	DueDate                  string `json:"due_date"`
+	DueTime                  string `json:"due_time"`
 	EffortPoints             *int   `json:"effort_points"`
 	AssigneeTelegramUsername string `json:"assignee_telegram_username"`
 	AssigneeEmail            string `json:"assignee_email"`
 }
 
-func (s *Service) parseWithAI(ctx context.Context, text string) tasks.CreateRequest {
-	todayStr := time.Now().Format("2006-01-02")
+func (s *Service) parseWithAI(ctx context.Context, text string, loc *time.Location) tasks.CreateRequest {
+	todayStr := time.Now().In(loc).Format("2006-01-02")
 	systemPrompt := fmt.Sprintf(`You are an agentic task planner. Process natural language task input.
 Extract task details.
 If the text implies a specific task title, extract/rephrase a concise title.
 If it contains more context, set it as description.
 If it implies a due date, output it in YYYY-MM-DD format (today is %s).
+If it also implies a specific time of day (e.g. "at 3pm", "by 9:30am", "tonight"), output it in 24-hour HH:MM format as due_time. Only set due_time if a time was actually mentioned or clearly implied - leave it null for a bare date.
 If you can estimate the difficulty/effort (on a scale of 1 to 10), set effort_points (integer).
 If you can figure out priority, set priority ("low"|"medium"|"high").
 If the text implies the task is for or assigned to another user, try to extract their Telegram username (e.g. "@username" -> "username") into assignee_telegram_username, or their email address into assignee_email.
@@ -200,6 +227,7 @@ Respond with ONLY valid JSON. Do not wrap the JSON in markdown code blocks:
   "description": "contextual details or rephrased instructions",
   "priority": "low"|"medium"|"high"|null,
   "due_date": "YYYY-MM-DD"|null,
+  "due_time": "HH:MM"|null,
   "effort_points": int|null,
   "assignee_telegram_username": "username"|null,
   "assignee_email": "email"|null
@@ -260,7 +288,14 @@ Respond with ONLY valid JSON. Do not wrap the JSON in markdown code blocks:
 	}
 
 	if p.DueDate != "" {
-		if t, err := time.Parse("2006-01-02", p.DueDate); err == nil {
+		// No time mentioned -> end of day, matching the frontend's "no explicit
+		// time" sentinel (23:59:59 local) so the task doesn't display a bogus
+		// midnight due time.
+		timePart := "23:59:59"
+		if matched, _ := regexp.MatchString(`^\d{2}:\d{2}$`, p.DueTime); matched {
+			timePart = p.DueTime + ":00"
+		}
+		if t, err := time.ParseInLocation("2006-01-02T15:04:05", p.DueDate+"T"+timePart, loc); err == nil {
 			req.DueDate = &t
 		}
 	}

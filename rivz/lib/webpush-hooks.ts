@@ -22,6 +22,7 @@ export type Me = {
   display_name: string | null;
   avatar_url: string | null;
   username: string | null;
+  timezone: string | null;
 };
 
 const DEFAULT_PREFS: NotifPrefs = {
@@ -50,6 +51,7 @@ export type PreferencesPatch = {
   notif_chat_kind?: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  timezone?: string | null;
 };
 
 export function useUpdatePreferences() {

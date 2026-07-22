@@ -170,10 +170,17 @@ type Preferences struct {
 	ChatKind      *string
 	DisplayName   *string
 	AvatarURL     *string
+	// Timezone is an IANA zone name (e.g. "Asia/Kolkata"), or "" to clear it.
+	Timezone *string
 }
 
 // UpdatePreferences updates user preferences.
 func (s *Service) UpdatePreferences(ctx context.Context, id string, prefs Preferences) error {
+	if prefs.Timezone != nil && *prefs.Timezone != "" {
+		if _, err := time.LoadLocation(*prefs.Timezone); err != nil {
+			return fmt.Errorf("%w: %s", ErrInvalidTimezone, *prefs.Timezone)
+		}
+	}
 	return s.repo.UpdatePreferences(ctx, id, prefs)
 }
 

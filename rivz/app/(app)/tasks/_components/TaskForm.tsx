@@ -281,7 +281,12 @@ export function TaskForm({ open, onOpenChange, task, defaultDate }: TaskFormProp
   const initialDate = task?.due_date ? parseISO(task.due_date) : defaultDate ? parseISO(defaultDate) : undefined;
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(initialDate);
   // "23:59" is the no-explicit-time sentinel (end of day default) - don't prefill it as if the user picked it.
-  const initialTime = initialDate && format(initialDate, "HH:mm") !== "23:59" ? format(initialDate, "HH:mm") : "";
+  // Only an existing task's due_date carries meaningful time info; a bare `defaultDate`
+  // (e.g. from the Calendar view's "+" button) is always a plain yyyy-MM-dd string, and
+  // parseISO() of a date-only string yields local midnight - which must NOT be read as
+  // an explicit "00:00" time pick, or the task saves with a phantom midnight due time.
+  const existingDue = task?.due_date ? parseISO(task.due_date) : undefined;
+  const initialTime = existingDue && format(existingDue, "HH:mm") !== "23:59" ? format(existingDue, "HH:mm") : "";
   const [dueTime, setDueTime] = useState(initialTime);
 
   useEffect(() => {

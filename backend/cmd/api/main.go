@@ -331,7 +331,7 @@ func run() error {
 	var telegramHandler *telegram.Handler
 	if cfg.TelegramBotToken != "" {
 		telegramRepo := telegram.NewRepository(pool)
-		telegramSvc := telegram.NewService(telegramRepo, tasksSvc, cfg.TelegramBotToken, groqClient)
+		telegramSvc := telegram.NewService(telegramRepo, tasksSvc, cfg.TelegramBotToken, cfg.TelegramTZ, groqClient)
 		telegramHandler = telegram.NewHandler(telegramSvc)
 		go telegramSvc.StartPolling(schedulerCtx)
 		log.Println("Telegram bot polling started")

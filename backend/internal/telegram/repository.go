@@ -17,6 +17,8 @@ type Repository interface {
 	UserIDByTelegramUsername(ctx context.Context, username string) (string, error)
 	UserIDByEmail(ctx context.Context, email string) (string, error)
 	GetAssigneeName(ctx context.Context, id string) (string, error)
+	// GetUserTimezone returns the user's IANA timezone preference, or "" if unset.
+	GetUserTimezone(ctx context.Context, userID string) (string, error)
 }
 
 type pgRepository struct{ pool *pgxpool.Pool }
@@ -106,4 +108,13 @@ func (r *pgRepository) GetAssigneeName(ctx context.Context, id string) (string, 
 		return "", fmt.Errorf("telegram.GetAssigneeName: %w", err)
 	}
 	return name, nil
+}
+
+func (r *pgRepository) GetUserTimezone(ctx context.Context, userID string) (string, error) {
+	var tz string
+	err := r.pool.QueryRow(ctx, `SELECT COALESCE(timezone, '') FROM users WHERE id = $1`, userID).Scan(&tz)
+	if err != nil {
+		return "", fmt.Errorf("telegram.GetUserTimezone: %w", err)
+	}
+	return tz, nil
 }

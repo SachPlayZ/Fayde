@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { formatDistanceToNow, format } from "date-fns";
@@ -1161,6 +1161,20 @@ function CalendarTab() {
 
 // ─── Profile Tab ─────────────────────────────────────────────────────────────
 
+// Full IANA zone list where supported; a small fallback for older browsers.
+const TIMEZONE_OPTIONS: string[] =
+  typeof Intl !== "undefined" && "supportedValuesOf" in Intl
+    ? (Intl as unknown as { supportedValuesOf: (key: string) => string[] }).supportedValuesOf("timeZone")
+    : ["UTC", "America/New_York", "America/Los_Angeles", "Europe/London", "Europe/Berlin", "Asia/Kolkata", "Asia/Singapore", "Asia/Tokyo", "Australia/Sydney"];
+
+function detectBrowserTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 function ProfileTab() {
   const { data: me, isLoading, refetch } = useMe();
   const updatePrefs = useUpdatePreferences();
@@ -1169,25 +1183,44 @@ function ProfileTab() {
 
   const [displayName, setDisplayName] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [timezone, setTimezone] = useState("");
   const [dirty, setDirty] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [username, setUsername] = useState("");
   const [usernameDirty, setUsernameDirty] = useState(false);
   const [usernameError, setUsernameError] = useState<string | null>(null);
+  const autoDetectedRef = useRef(false);
 
   useEffect(() => {
     if (me) {
       const dn = me.display_name ?? "";
       const au = me.avatar_url ?? "";
+      const tz = me.timezone ?? "";
       Promise.resolve().then(() => {
         setDisplayName(dn);
         setAvatarUrl(au);
+        setTimezone(tz || detectBrowserTimezone());
         setDirty(false);
         setUsername(me.username ?? "");
         setUsernameDirty(false);
         setUsernameError(null);
       });
     }
+  }, [me]);
+
+  // First time we see a user with no timezone preference saved yet, silently
+  // persist the browser's detected zone so date/time-dependent features that
+  // have no browser of their own (e.g. the Telegram bot) work correctly
+  // without requiring a trip to Settings.
+  useEffect(() => {
+    if (me && !me.timezone && !autoDetectedRef.current) {
+      autoDetectedRef.current = true;
+      updatePrefs.mutate(
+        { timezone: detectBrowserTimezone() },
+        { onSuccess: () => refetch() }
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me]);
 
   if (isLoading || !me) {
@@ -1238,7 +1271,7 @@ function ProfileTab() {
 
   const handleSave = () => {
     updatePrefs.mutate(
-      { display_name: displayName.trim(), avatar_url: avatarUrl.trim() || null },
+      { display_name: displayName.trim(), avatar_url: avatarUrl.trim() || null, timezone },
       {
         onSuccess: async () => {
           toast.success("Profile updated");
@@ -1343,6 +1376,31 @@ function ProfileTab() {
               setDirty(true);
             }}
           />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="profile-timezone">Timezone</Label>
+          <Select
+            value={timezone}
+            onValueChange={(v) => {
+              setTimezone(v);
+              setDirty(true);
+            }}
+          >
+            <SelectTrigger id="profile-timezone" className="w-full">
+              <SelectValue placeholder="Select timezone" />
+            </SelectTrigger>
+            <SelectContent>
+              {TIMEZONE_OPTIONS.map((tz) => (
+                <SelectItem key={tz} value={tz}>
+                  {tz.replace(/_/g, " ")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground">
+            Used to interpret dates and times from the Telegram bot and other server-side features.
+          </p>
         </div>
 
         <Button

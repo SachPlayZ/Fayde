@@ -83,12 +83,12 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 		ProjectID: q.Get("project_id"),
 	}
 	if s := q.Get("due_date_from"); s != "" {
-		if t, err := time.Parse(time.RFC3339, s); err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
 			p.DueDateFrom = &t
 		}
 	}
 	if s := q.Get("due_date_to"); s != "" {
-		if t, err := time.Parse(time.RFC3339, s); err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
 			p.DueDateTo = &t
 		}
 	}

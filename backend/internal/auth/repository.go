@@ -41,7 +41,7 @@ const userSelect = `id, email, password_hash, role,
 	COALESCE(theme,'system'), COALESCE(digest_enabled,true),
 	COALESCE(notif_prefs,'{}'), notif_chat_url, notif_chat_kind, inbox_token,
 	COALESCE(email_verified,false), COALESCE(provider,'local'), provider_id,
-	created_at, display_name, avatar_url, username`
+	created_at, display_name, avatar_url, username, timezone`
 
 func scanUser(row pgx.Row) (*User, error) {
 	u := &User{}
@@ -50,7 +50,7 @@ func scanUser(row pgx.Row) (*User, error) {
 		&u.Theme, &u.DigestEnabled,
 		&u.NotifPrefs, &u.ChatURL, &u.ChatKind, &u.InboxToken,
 		&u.EmailVerified, &u.Provider, &u.ProviderID,
-		&u.CreatedAt, &u.DisplayName, &u.AvatarURL, &u.Username,
+		&u.CreatedAt, &u.DisplayName, &u.AvatarURL, &u.Username, &u.Timezone,
 	)
 	if err != nil {
 		return nil, err
@@ -132,6 +132,15 @@ func (r *pgRepository) UpdatePreferences(ctx context.Context, id string, prefs P
 	if prefs.AvatarURL != nil {
 		sets = append(sets, fmt.Sprintf("avatar_url=$%d", idx))
 		args = append(args, *prefs.AvatarURL)
+		idx++
+	}
+	if prefs.Timezone != nil {
+		sets = append(sets, fmt.Sprintf("timezone=$%d", idx))
+		if *prefs.Timezone == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, *prefs.Timezone)
+		}
 		idx++
 	}
 	if len(sets) == 0 {

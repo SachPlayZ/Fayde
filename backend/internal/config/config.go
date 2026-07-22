@@ -36,6 +36,7 @@ type Config struct {
 	VAPIDPrivateKey     string
 	VAPIDSubject        string
 	TelegramBotToken    string
+	TelegramTZ          string
 	InboxDomain         string
 }
 
@@ -94,6 +95,11 @@ func Load() (*Config, error) {
 		vapidSubject = "mailto:" + resendFrom
 	}
 
+	telegramTZ := os.Getenv("TELEGRAM_TZ")
+	if telegramTZ == "" {
+		telegramTZ = "UTC"
+	}
+
 	inboxDomain := os.Getenv("INBOX_DOMAIN")
 	if inboxDomain == "" {
 		// Default: extract domain from RESEND_FROM (e.g. "noreply@fayde.app" → "fayde.app").
@@ -130,6 +136,7 @@ func Load() (*Config, error) {
 		VAPIDPrivateKey:     os.Getenv("VAPID_PRIVATE_KEY"),
 		VAPIDSubject:        vapidSubject,
 		TelegramBotToken:    os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramTZ:          telegramTZ,
 		InboxDomain:         inboxDomain,
 	}, nil
 }

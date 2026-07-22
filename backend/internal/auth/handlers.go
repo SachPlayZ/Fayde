@@ -185,7 +185,7 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		Theme: user.Theme, DigestEnabled: user.DigestEnabled,
 		NotifPrefs: user.NotifPrefs, ChatURL: user.ChatURL, ChatKind: user.ChatKind,
 		InboxToken: user.InboxToken, DisplayName: user.DisplayName, AvatarURL: user.AvatarURL,
-		Username: user.Username,
+		Username: user.Username, Timezone: user.Timezone,
 	})
 }
 
@@ -238,6 +238,7 @@ func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 		ChatKind      *string          `json:"notif_chat_kind"`
 		DisplayName   *string          `json:"display_name"`
 		AvatarURL     *string          `json:"avatar_url"`
+		Timezone      *string          `json:"timezone"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		httputil.Error(w, http.StatusBadRequest, "invalid body")
@@ -252,8 +253,13 @@ func (h *Handler) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 		ChatKind:      body.ChatKind,
 		DisplayName:   body.DisplayName,
 		AvatarURL:     body.AvatarURL,
+		Timezone:      body.Timezone,
 	}
 	if err := h.svc.UpdatePreferences(r.Context(), userID, prefs); err != nil {
+		if errors.Is(err, ErrInvalidTimezone) {
+			httputil.Error(w, http.StatusBadRequest, "invalid timezone")
+			return
+		}
 		httputil.Error(w, http.StatusInternalServerError, "failed to update preferences")
 		return
 	}

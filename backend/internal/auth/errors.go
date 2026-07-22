@@ -22,3 +22,6 @@ var ErrTokenExpired = errors.New("auth: verification token expired")
 
 // ErrDuplicateUsername is returned when a username is already taken.
 var ErrDuplicateUsername = errors.New("auth: username already taken")
+
+// ErrInvalidTimezone is returned when a timezone preference isn't a valid IANA zone name.
+var ErrInvalidTimezone = errors.New("auth: invalid timezone")
